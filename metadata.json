@@ -1,0 +1,6 @@
+{
+  "name": "SIM PKL Supabase",
+  "description": "Sistem Informasi Manajemen Praktik Kerja Lapangan (SIM PKL) dengan integrasi database Supabase untuk siswa, pembimbing, dan industri.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
