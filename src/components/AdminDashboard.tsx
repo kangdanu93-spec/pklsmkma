@@ -5,14 +5,15 @@ import {
   FileSpreadsheet, UploadCloud
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { PklUser, PklInstansi, PklPlacement, PklEvaluation, Announcement, UserRole, PklClass } from '../types';
+import { PklUser, PklInstansi, PklPlacement, PklEvaluation, Announcement, UserRole, PklClass, MenuAccess } from '../types';
 import { 
   dbGetUsers, dbSaveUser, dbDeleteUser, 
   dbGetInstansi, dbSaveInstansi, dbDeleteInstansi, 
   dbGetPlacements, dbSavePlacement, 
   dbGetEvaluations, 
   dbGetAnnouncements, dbSaveAnnouncement, dbDeleteAnnouncement,
-  dbGetAttendance, dbGetClasses, dbSaveClass, dbDeleteClass
+  dbGetAttendance, dbGetClasses, dbSaveClass, dbDeleteClass,
+  dbGetMenuAccess, dbSaveMenuAccess, isSuperAdmin
 } from '../utils/localDb';
 
 const STATIC_KELAS_OPTIONS = [
@@ -46,8 +47,8 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
   const [classesList, setClassesList] = useState<PklClass[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Active sub-tab state ('placements' | 'students' | 'users' | 'companies' | 'reports' | 'classes')
-  const [activeTab, setActiveTab] = useState<'placements' | 'students' | 'users' | 'companies' | 'reports' | 'classes'>('placements');
+  // Active sub-tab state ('placements' | 'students' | 'users' | 'companies' | 'reports' | 'classes' | 'permissions')
+  const [activeTab, setActiveTab] = useState<'placements' | 'students' | 'users' | 'companies' | 'reports' | 'classes' | 'permissions'>('placements');
 
   // Dynamic dropdown options calculated from master classes state, with static fallbacks
   const KELAS_OPTIONS = classesList.length > 0
@@ -110,6 +111,43 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
   const [isDragOver, setIsDragOver] = useState(false);
   const [importStatus, setImportStatus] = useState<{ success?: string; error?: string } | null>(null);
 
+  // Menu permissions
+  const [menuAccessList, setMenuAccessList] = useState<MenuAccess[]>([]);
+  const [permissionsSuccess, setPermissionsSuccess] = useState('');
+
+  const fetchPermissionsData = () => {
+    const perms = dbGetMenuAccess();
+    setMenuAccessList(perms);
+  };
+
+  const handleTogglePermission = (menuId: string, role: UserRole) => {
+    const updated = menuAccessList.map(menu => {
+      if (menu.id === menuId) {
+        let roles = [...menu.allowed_roles];
+        if (roles.includes(role)) {
+          roles = roles.filter(r => r !== role);
+        } else {
+          roles.push(role);
+        }
+        return { ...menu, allowed_roles: roles };
+      }
+      return menu;
+    });
+    setMenuAccessList(updated);
+    dbSaveMenuAccess(updated);
+    setPermissionsSuccess('Konfigurasi Hak Akses berhasil disimpan secara real-time!');
+    setTimeout(() => setPermissionsSuccess(''), 3000);
+    onRefreshGlobalData(); // trigger immediate refresh in the main App component
+  };
+
+  const isTabAllowed = (tabMenuId: string): boolean => {
+    if (!admin) return false;
+    if (isSuperAdmin(admin)) return true;
+    const menu = menuAccessList.find(m => m.id === tabMenuId);
+    if (!menu) return true;
+    return menu.allowed_roles.includes(admin.role);
+  };
+
   useEffect(() => {
     fetchAdminData();
   }, []);
@@ -117,6 +155,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
   const fetchAdminData = async () => {
     setLoading(true);
     try {
+      fetchPermissionsData();
       const resUsers = await dbGetUsers();
       setUsers(resUsers.data);
 
@@ -687,53 +726,73 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
 
       {/* NAVIGATION TABS */}
       <div className="flex border-b border-slate-200 gap-2 overflow-x-auto pb-px">
+        {isTabAllowed('admin_plotting') && (
+          <button
+            onClick={() => setActiveTab('placements')}
+            className={`px-5 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
+              activeTab === 'placements' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            Plotting & Pengajuan PKL
+          </button>
+        )}
+        {isTabAllowed('admin_siswa') && (
+          <button
+            onClick={() => { setActiveTab('students'); setUserRole('siswa'); }}
+            className={`px-5 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
+              activeTab === 'students' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            Master Data Siswa
+          </button>
+        )}
+        {isTabAllowed('admin_pengguna') && (
+          <button
+            onClick={() => { setActiveTab('users'); setUserRole('siswa'); }}
+            className={`px-5 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
+              activeTab === 'users' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            Kelola Pengguna
+          </button>
+        )}
+        {isTabAllowed('admin_instansi') && (
+          <button
+            onClick={() => setActiveTab('companies')}
+            className={`px-5 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
+              activeTab === 'companies' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            Kelola Instansi
+          </button>
+        )}
+        {isTabAllowed('admin_kelas') && (
+          <button
+            onClick={() => setActiveTab('classes')}
+            className={`px-5 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
+              activeTab === 'classes' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            Master Kelas
+          </button>
+        )}
+        {isTabAllowed('admin_rekap') && (
+          <button
+            onClick={() => setActiveTab('reports')}
+            className={`px-5 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
+              activeTab === 'reports' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            Laporan Rekap Nilai
+          </button>
+        )}
         <button
-          onClick={() => setActiveTab('placements')}
+          onClick={() => setActiveTab('permissions')}
           className={`px-5 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
-            activeTab === 'placements' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+            activeTab === 'permissions' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
-          Plotting & Pengajuan PKL
-        </button>
-        <button
-          onClick={() => { setActiveTab('students'); setUserRole('siswa'); }}
-          className={`px-5 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
-            activeTab === 'students' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          Master Data Siswa
-        </button>
-        <button
-          onClick={() => { setActiveTab('users'); setUserRole('siswa'); }}
-          className={`px-5 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
-            activeTab === 'users' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          Kelola Pengguna
-        </button>
-        <button
-          onClick={() => setActiveTab('companies')}
-          className={`px-5 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
-            activeTab === 'companies' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          Kelola Instansi
-        </button>
-        <button
-          onClick={() => setActiveTab('classes')}
-          className={`px-5 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
-            activeTab === 'classes' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          Master Kelas
-        </button>
-        <button
-          onClick={() => setActiveTab('reports')}
-          className={`px-5 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
-            activeTab === 'reports' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          Laporan Rekap Nilai
+          Hak Akses Menu
         </button>
       </div>
 
@@ -1539,10 +1598,124 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
             </div>
           )}
 
+          {/* TAB 6: MENU PERMISSIONS (MAIN PANE) */}
+          {activeTab === 'permissions' && (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 animate-fade-in" id="admin-permissions-mgmt">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div>
+                  <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <ShieldAlert className="w-5 h-5 text-indigo-600" /> Master Hak Akses Menu & Modul
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Konfigurasikan peran pengguna yang diizinkan untuk mengakses menu-menu di bawah ini.</p>
+                </div>
+              </div>
+
+              {permissionsSuccess && (
+                <div className="p-3 bg-emerald-50 text-emerald-800 border border-emerald-100 rounded-xl text-xs font-semibold mb-4 flex items-center gap-1.5 animate-bounce">
+                  <Check className="w-4 h-4 text-emerald-600" /> {permissionsSuccess}
+                </div>
+              )}
+
+              <div className="overflow-x-auto rounded-xl border border-slate-100 shadow-inner">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                      <th className="py-3 px-4">Nama Menu / Modul & Deskripsi</th>
+                      <th className="py-3 px-4 text-center w-16">Siswa</th>
+                      <th className="py-3 px-4 text-center w-16">Guru</th>
+                      <th className="py-3 px-4 text-center w-16">Industri</th>
+                      <th className="py-3 px-4 text-center w-16">Admin</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-600">
+                    {(['Utama', 'Siswa', 'Guru', 'Industri', 'Admin'] as const).map((cat) => {
+                      const items = menuAccessList.filter(m => m.kategori === cat);
+                      if (items.length === 0) return null;
+                      return (
+                        <React.Fragment key={cat}>
+                          <tr className="bg-slate-50/65">
+                            <td colSpan={5} className="py-2.5 px-4 font-extrabold text-indigo-900 text-[10px] uppercase tracking-wider bg-slate-50/50 border-y border-slate-100">
+                              Kategori: Modul {cat}
+                            </td>
+                          </tr>
+                          {items.map((menu) => (
+                            <tr key={menu.id} className="hover:bg-slate-50/30 transition-colors">
+                              <td className="py-4 px-4 pr-6">
+                                <span className="font-bold text-slate-800 text-sm block">{menu.nama_menu}</span>
+                                <span className="text-slate-400 text-[11px] block mt-1 leading-relaxed max-w-lg">{menu.deskripsi}</span>
+                              </td>
+                              <td className="py-4 px-4 text-center">
+                                <input
+                                  type="checkbox"
+                                  id={`perm-siswa-${menu.id}`}
+                                  checked={menu.allowed_roles.includes('siswa')}
+                                  onChange={() => handleTogglePermission(menu.id, 'siswa')}
+                                  className="w-4.5 h-4.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer transition-all"
+                                />
+                              </td>
+                              <td className="py-4 px-4 text-center">
+                                <input
+                                  type="checkbox"
+                                  id={`perm-guru-${menu.id}`}
+                                  checked={menu.allowed_roles.includes('guru')}
+                                  onChange={() => handleTogglePermission(menu.id, 'guru')}
+                                  className="w-4.5 h-4.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer transition-all"
+                                />
+                              </td>
+                              <td className="py-4 px-4 text-center">
+                                <input
+                                  type="checkbox"
+                                  id={`perm-industri-${menu.id}`}
+                                  checked={menu.allowed_roles.includes('industri')}
+                                  onChange={() => handleTogglePermission(menu.id, 'industri')}
+                                  className="w-4.5 h-4.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer transition-all"
+                                />
+                              </td>
+                              <td className="py-4 px-4 text-center">
+                                <input
+                                  type="checkbox"
+                                  id={`perm-admin-${menu.id}`}
+                                  checked={menu.allowed_roles.includes('admin')}
+                                  onChange={() => handleTogglePermission(menu.id, 'admin')}
+                                  className="w-4.5 h-4.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer transition-all"
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
         </div>
 
         {/* RIGHT COLUMN: ACTION FORMS (USER ADD, INSTANSI ADD, ANNOUNCEMENTS) */}
         <div className="lg:col-span-4 space-y-8">
+          
+          {/* PERMISSIONS INFO PANEL */}
+          {activeTab === 'permissions' && (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-4" id="permissions-sidebar">
+              <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3">
+                <ShieldAlert className="w-4.5 h-4.5 text-indigo-600 animate-pulse" /> Informasi Hak Akses
+              </h4>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Pengaturan hak akses menentukan menu mana saja yang dapat dilihat dan digunakan oleh setiap peran di sistem SIM PKL.
+              </p>
+              <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl text-xs text-indigo-800 leading-relaxed space-y-2">
+                <p className="font-bold">Keamanan Master:</p>
+                <p>
+                  Untuk modul sensitif seperti <strong className="text-slate-900">Setup Supabase</strong>, sistem membatasi akses secara absolut hanya untuk <strong className="text-slate-900">Super Admin</strong> (seperti <span className="font-semibold text-slate-900 bg-white px-1.5 py-0.5 rounded border border-indigo-200">admin@simpkl.com</span> atau <span className="font-semibold text-slate-900 bg-white px-1.5 py-0.5 rounded border border-indigo-200">kangdanu93@gmail.com</span>) untuk mencegah penyalahgunaan database cloud.
+                </p>
+              </div>
+              <div className="text-[11px] text-slate-400 italic font-medium leading-relaxed">
+                * Perubahan akan langsung disimpan secara real-time dan diterapkan ke semua sesi pengguna aktif.
+              </div>
+            </div>
+          )}
           
           {/* USER ADD FORM */}
           {(activeTab === 'users' || activeTab === 'students') && (

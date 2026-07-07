@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Users, FileText, CheckCircle2, XCircle, AlertCircle, Edit, Star, RefreshCw, Send, Trash, Bookmark, Calendar, Check, MessageSquare } from 'lucide-react';
-import { PklUser, PklJournal, PklAttendance, PklEvaluation, Announcement, PklInstansi, PklPlacement } from '../types';
-import { dbGetUsers, dbGetJournals, dbSaveJournal, dbGetAttendance, dbSaveAttendance, dbGetEvaluations, dbSaveEvaluation, dbGetAnnouncements, dbSaveAnnouncement, dbDeleteAnnouncement, dbGetPlacements } from '../utils/localDb';
+import { PklUser, PklJournal, PklAttendance, PklEvaluation, Announcement, PklInstansi, PklPlacement, MenuAccess } from '../types';
+import { dbGetUsers, dbGetJournals, dbSaveJournal, dbGetAttendance, dbSaveAttendance, dbGetEvaluations, dbSaveEvaluation, dbGetAnnouncements, dbSaveAnnouncement, dbDeleteAnnouncement, dbGetPlacements, dbGetMenuAccess } from '../utils/localDb';
 
 interface TeacherDashboardProps {
   teacher: PklUser;
@@ -9,6 +9,19 @@ interface TeacherDashboardProps {
 }
 
 export default function TeacherDashboard({ teacher, instansiList }: TeacherDashboardProps) {
+  // Menu permissions
+  const [menuAccessList, setMenuAccessList] = useState<MenuAccess[]>([]);
+
+  useEffect(() => {
+    setMenuAccessList(dbGetMenuAccess());
+  }, []);
+
+  const isFeatureAllowed = (id: string): boolean => {
+    const menu = menuAccessList.find(m => m.id === id);
+    if (!menu) return true;
+    return menu.allowed_roles.includes('guru');
+  };
+
   const [students, setStudents] = useState<PklUser[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<PklUser | null>(null);
   const [journals, setJournals] = useState<PklJournal[]>([]);
@@ -347,6 +360,7 @@ export default function TeacherDashboard({ teacher, instansiList }: TeacherDashb
                 <div className="md:col-span-8 space-y-8">
                   
                   {/* JURNAL VERIFICATION PANEL */}
+                  {isFeatureAllowed('guru_jurnal') && (
                   <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
                     <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center justify-between">
                       <span>Jurnal Kegiatan Siswa</span>
@@ -443,8 +457,10 @@ export default function TeacherDashboard({ teacher, instansiList }: TeacherDashb
                       </div>
                     )}
                   </div>
+                  )}
 
                   {/* ATTENDANCE APPROVAL PANEL */}
+                  {isFeatureAllowed('guru_presensi') && (
                   <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
                     <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center justify-between">
                       <span>Presensi & Kehadiran Siswa</span>
@@ -500,6 +516,7 @@ export default function TeacherDashboard({ teacher, instansiList }: TeacherDashb
                       </div>
                     )}
                   </div>
+                  )}
 
                 </div>
 
@@ -507,6 +524,7 @@ export default function TeacherDashboard({ teacher, instansiList }: TeacherDashb
                 <div className="md:col-span-4 space-y-6">
                   
                   {/* PENILAIAN SEKOLAH FORM */}
+                  {isFeatureAllowed('guru_nilai') && (
                   <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4">
                     <h4 className="text-sm font-bold text-slate-800 flex items-center gap-1">
                       <Star className="w-4 h-4 text-indigo-600" /> Input Nilai Sekolah
@@ -560,6 +578,7 @@ export default function TeacherDashboard({ teacher, instansiList }: TeacherDashb
                       {gradeSuccess && <p className="text-[10px] text-emerald-600 font-semibold">{gradeSuccess}</p>}
                     </form>
                   </div>
+                  )}
 
                   {/* LEMBAR NILAI INDUSTRI (READ ONLY FOR SCHOOLS) */}
                   <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-3 text-xs">

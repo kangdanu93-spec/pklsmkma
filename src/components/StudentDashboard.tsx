@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, BookOpen, Send, CheckCircle, AlertCircle, RefreshCw, Star, Info, FileText, CheckCircle2, XCircle } from 'lucide-react';
-import { PklUser, PklInstansi, PklJournal, PklAttendance, PklPlacement, PklEvaluation, Announcement } from '../types';
-import { dbGetJournals, dbSaveJournal, dbGetAttendance, dbSaveAttendance, dbGetPlacements, dbSavePlacement, dbGetInstansi, dbGetEvaluations } from '../utils/localDb';
+import { PklUser, PklInstansi, PklJournal, PklAttendance, PklPlacement, PklEvaluation, Announcement, MenuAccess } from '../types';
+import { dbGetJournals, dbSaveJournal, dbGetAttendance, dbSaveAttendance, dbGetPlacements, dbSavePlacement, dbGetInstansi, dbGetEvaluations, dbGetMenuAccess } from '../utils/localDb';
 
 interface StudentDashboardProps {
   student: PklUser;
@@ -10,6 +10,19 @@ interface StudentDashboardProps {
 }
 
 export default function StudentDashboard({ student, instansiList, announcements }: StudentDashboardProps) {
+  // Menu permissions
+  const [menuAccessList, setMenuAccessList] = useState<MenuAccess[]>([]);
+
+  useEffect(() => {
+    setMenuAccessList(dbGetMenuAccess());
+  }, []);
+
+  const isFeatureAllowed = (id: string): boolean => {
+    const menu = menuAccessList.find(m => m.id === id);
+    if (!menu) return true;
+    return menu.allowed_roles.includes('siswa');
+  };
+
   // Data states
   const [journals, setJournals] = useState<PklJournal[]>([]);
   const [attendanceLogs, setAttendanceLogs] = useState<PklAttendance[]>([]);
@@ -291,7 +304,7 @@ export default function StudentDashboard({ student, instansiList, announcements 
         <div className="lg:col-span-8 space-y-8">
           
           {/* 2. MENU PRESENSI HARIAN */}
-          {placement?.status === 'disetujui' && (
+          {isFeatureAllowed('siswa_presensi') && placement?.status === 'disetujui' && (
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6" id="attendance-section">
               <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2 mb-4">
                 <Clock className="w-5 h-5 text-indigo-600" /> Presensi Harian (Hari Ini)
@@ -394,7 +407,8 @@ export default function StudentDashboard({ student, instansiList, announcements 
           )}
 
           {/* 3. INPUT JURNAL HARIAN */}
-          {placement?.status === 'disetujui' && (
+          {/* 3. MENU PENGISIAN JURNAL */}
+          {isFeatureAllowed('siswa_jurnal') && placement?.status === 'disetujui' && (
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6" id="journal-input-section">
               <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2 mb-4">
                 <BookOpen className="w-5 h-5 text-indigo-600" /> Tulis Jurnal Kegiatan PKL
@@ -456,7 +470,7 @@ export default function StudentDashboard({ student, instansiList, announcements 
           )}
 
           {/* 4. PENGAJUAN TEMPAT PKL (JIKA BELUM DISETUJUI) */}
-          {(!placement || placement.status !== 'disetujui') && (
+          {isFeatureAllowed('siswa_pengajuan') && (!placement || placement.status !== 'disetujui') && (
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6" id="apply-placement-section">
               <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2 mb-4">
                 <FileText className="w-5 h-5 text-indigo-600" /> Form Pengajuan Tempat PKL
@@ -529,7 +543,7 @@ export default function StudentDashboard({ student, instansiList, announcements 
           )}
 
           {/* 5. HISTORI JURNAL KEGIATAN */}
-          {placement?.status === 'disetujui' && (
+          {isFeatureAllowed('siswa_jurnal') && placement?.status === 'disetujui' && (
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6" id="journals-list-section">
               <h3 className="text-base font-semibold text-slate-800 mb-4 flex items-center justify-between">
                 <span>Histori Jurnal Kegiatan ({journals.length})</span>
@@ -588,7 +602,7 @@ export default function StudentDashboard({ student, instansiList, announcements 
         <div className="lg:col-span-4 space-y-8">
           
           {/* 6. DETAIL NILAI PKL */}
-          {evaluation && (
+          {isFeatureAllowed('siswa_nilai') && evaluation && (
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6" id="student-evaluation-panel">
               <h3 className="text-base font-semibold text-slate-800 flex items-center gap-1.5 mb-4">
                 <Star className="w-5 h-5 text-indigo-600" /> Lembar Nilai Akhir PKL
@@ -671,7 +685,8 @@ export default function StudentDashboard({ student, instansiList, announcements 
           </div>
 
           {/* 8. HISTORI PRESENSI */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6" id="attendance-history-panel">
+          {isFeatureAllowed('siswa_presensi') && (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6" id="attendance-history-panel">
             <h3 className="text-base font-semibold text-slate-800 mb-3 flex items-center justify-between">
               <span>Log Presensi ({attendanceLogs.length})</span>
             </h3>
@@ -706,6 +721,7 @@ export default function StudentDashboard({ student, instansiList, announcements 
               </div>
             )}
           </div>
+          )}
 
         </div>
       </div>

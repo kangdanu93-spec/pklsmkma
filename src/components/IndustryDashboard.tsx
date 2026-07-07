@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Briefcase, FileText, CheckCircle2, XCircle, Users, Star, RefreshCw, Send, Bookmark, Info, Check } from 'lucide-react';
-import { PklUser, PklJournal, PklAttendance, PklEvaluation, PklInstansi } from '../types';
-import { dbGetUsers, dbGetJournals, dbSaveJournal, dbGetAttendance, dbSaveAttendance, dbGetEvaluations, dbSaveEvaluation } from '../utils/localDb';
+import { PklUser, PklJournal, PklAttendance, PklEvaluation, PklInstansi, MenuAccess } from '../types';
+import { dbGetUsers, dbGetJournals, dbSaveJournal, dbGetAttendance, dbSaveAttendance, dbGetEvaluations, dbSaveEvaluation, dbGetMenuAccess } from '../utils/localDb';
 
 interface IndustryDashboardProps {
   industry: PklUser;
@@ -9,6 +9,19 @@ interface IndustryDashboardProps {
 }
 
 export default function IndustryDashboard({ industry, instansiList }: IndustryDashboardProps) {
+  // Menu permissions
+  const [menuAccessList, setMenuAccessList] = useState<MenuAccess[]>([]);
+
+  useEffect(() => {
+    setMenuAccessList(dbGetMenuAccess());
+  }, []);
+
+  const isFeatureAllowed = (id: string): boolean => {
+    const menu = menuAccessList.find(m => m.id === id);
+    if (!menu) return true;
+    return menu.allowed_roles.includes('industri');
+  };
+
   const [students, setStudents] = useState<PklUser[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<PklUser | null>(null);
   const [journals, setJournals] = useState<PklJournal[]>([]);
@@ -266,6 +279,7 @@ export default function IndustryDashboard({ industry, instansiList }: IndustryDa
                 <div className="md:col-span-8 space-y-8">
                   
                   {/* DAILY JURNALS APPROVAL */}
+                  {isFeatureAllowed('industri_jurnal') && (
                   <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
                     <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center justify-between">
                       <span>Verifikasi Jurnal Harian</span>
@@ -318,8 +332,10 @@ export default function IndustryDashboard({ industry, instansiList }: IndustryDa
                       </div>
                     )}
                   </div>
+                  )}
 
                   {/* ATTENDANCE APPROVAL */}
+                  {isFeatureAllowed('industri_presensi') && (
                   <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
                     <h4 className="text-sm font-bold text-slate-800 mb-4">Verifikasi Absensi Harian</h4>
 
@@ -373,12 +389,14 @@ export default function IndustryDashboard({ industry, instansiList }: IndustryDa
                       </div>
                     )}
                   </div>
+                  )}
 
                 </div>
 
                 {/* GRADE INPUT (5 cols) */}
                 <div className="md:col-span-4 space-y-6">
                   
+                  {isFeatureAllowed('industri_nilai') && (
                   <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4">
                     <h4 className="text-sm font-bold text-slate-800 flex items-center gap-1">
                       <Star className="w-4 h-4 text-emerald-600" /> Penilaian Magang Industri
@@ -445,6 +463,7 @@ export default function IndustryDashboard({ industry, instansiList }: IndustryDa
                       {gradeSuccess && <p className="text-[10px] text-emerald-600 font-semibold">{gradeSuccess}</p>}
                     </form>
                   </div>
+                  )}
 
                 </div>
 

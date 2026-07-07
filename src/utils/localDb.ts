@@ -1,6 +1,6 @@
 import { getSupabaseClient, getSupabaseNoSessionClient } from '../supabaseClient';
 import { 
-  PklUser, PklInstansi, PklPlacement, PklJournal, PklAttendance, PklEvaluation, Announcement, PklClass 
+  PklUser, PklInstansi, PklPlacement, PklJournal, PklAttendance, PklEvaluation, Announcement, PklClass, MenuAccess 
 } from '../types';
 
 // SQL migration schema to show in the UI for users to copy/paste into Supabase
@@ -270,7 +270,65 @@ function initializeLocalStorage() {
     } catch (e) {
       console.error('Failed to migrate local users:', e);
     }
+    // Initialize menu access list if missing
+    if (!localStorage.getItem('SIM_PKL_MENU_ACCESS')) {
+      localStorage.setItem('SIM_PKL_MENU_ACCESS', JSON.stringify(DEFAULT_MENU_ACCESS));
+    }
   }
+}
+
+export const DEFAULT_MENU_ACCESS: MenuAccess[] = [
+  { id: 'dashboard_pkl', nama_menu: 'Dashboard PKL', kategori: 'Utama', allowed_roles: ['siswa', 'guru', 'industri', 'admin'], deskripsi: 'Akses ke halaman Dashboard utama sesuai peran masing-masing.' },
+  { id: 'statistik_hasil', nama_menu: 'Statistik & Hasil', kategori: 'Utama', allowed_roles: ['siswa', 'guru', 'industri', 'admin'], deskripsi: 'Akses ke menu Grafik Visual, Analitik, dan pencapaian PKL.' },
+  
+  { id: 'siswa_biodata', nama_menu: 'Biodata & Status PKL', kategori: 'Siswa', allowed_roles: ['siswa'], deskripsi: 'Melihat status penempatan, kelas, dan data pembimbing siswa.' },
+  { id: 'siswa_pengajuan', nama_menu: 'Pengajuan Tempat PKL', kategori: 'Siswa', allowed_roles: ['siswa'], deskripsi: 'Mengajukan surat minat penempatan mandiri ke instansi mitra.' },
+  { id: 'siswa_jurnal', nama_menu: 'Jurnal Kegiatan Harian', kategori: 'Siswa', allowed_roles: ['siswa'], deskripsi: 'Mengisi, mengedit, dan melihat riwayat jurnal kerja harian.' },
+  { id: 'siswa_presensi', nama_menu: 'Presensi Harian', kategori: 'Siswa', allowed_roles: ['siswa'], deskripsi: 'Melakukan absen masuk dan keluar magang harian.' },
+  { id: 'siswa_nilai', nama_menu: 'Hasil & Nilai Akhir', kategori: 'Siswa', allowed_roles: ['siswa'], deskripsi: 'Melihat rincian sertifikat nilai dari sekolah dan industri.' },
+
+  { id: 'guru_bimbingan', nama_menu: 'Daftar Bimbingan Siswa', kategori: 'Guru', allowed_roles: ['guru'], deskripsi: 'Melihat rincian siswa yang dibimbing secara langsung.' },
+  { id: 'guru_jurnal', nama_menu: 'Verifikasi Jurnal Kerja', kategori: 'Guru', allowed_roles: ['guru'], deskripsi: 'Memvalidasi, memberi catatan bimbingan, atau meminta revisi jurnal siswa.' },
+  { id: 'guru_presensi', nama_menu: 'Verifikasi Presensi Siswa', kategori: 'Guru', allowed_roles: ['guru'], deskripsi: 'Memvalidasi kehadiran siswa sakit/izin/alfa.' },
+  { id: 'guru_nilai', nama_menu: 'Input Nilai Laporan & Presentasi', kategori: 'Guru', allowed_roles: ['guru'], deskripsi: 'Memberikan nilai bimbingan, laporan akhir, dan presentasi ujian.' },
+
+  { id: 'industri_siswa', nama_menu: 'Daftar Siswa Magang', kategori: 'Industri', allowed_roles: ['industri'], deskripsi: 'Melihat rincian siswa yang sedang magang di perusahaan.' },
+  { id: 'industri_presensi', nama_menu: 'Persetujuan Kehadiran Harian', kategori: 'Industri', allowed_roles: ['industri'], deskripsi: 'Menyetujui atau menolak absensi masuk-keluar siswa harian.' },
+  { id: 'industri_nilai', nama_menu: 'Penilaian Kompetensi (Teknis/Karakter)', kategori: 'Industri', allowed_roles: ['industri'], deskripsi: 'Menginput nilai kompetensi teknis, non-teknis, dan kedisiplinan.' },
+
+  { id: 'admin_plotting', nama_menu: 'Plotting & Pengajuan PKL', kategori: 'Admin', allowed_roles: ['admin'], deskripsi: 'Memetakan pembimbing sekolah dan menyetujui pengajuan tempat PKL.' },
+  { id: 'admin_siswa', nama_menu: 'Master Data Siswa', kategori: 'Admin', allowed_roles: ['admin'], deskripsi: 'Mengelola biodata lengkap siswa dan impor data via Excel.' },
+  { id: 'admin_pengguna', nama_menu: 'Kelola Pengguna', kategori: 'Admin', allowed_roles: ['admin'], deskripsi: 'Mengelola login, password, dan level hak akses user lain.' },
+  { id: 'admin_instansi', nama_menu: 'Kelola Instansi Mitra', kategori: 'Admin', allowed_roles: ['admin'], deskripsi: 'Mengelola daftar perusahaan, kuota magang, dan kontak HRD.' },
+  { id: 'admin_kelas', nama_menu: 'Master Kelas', kategori: 'Admin', allowed_roles: ['admin'], deskripsi: 'Mengelola daftar kelas dan jurusan aktif.' },
+  { id: 'admin_rekap', nama_menu: 'Laporan Rekap Nilai', kategori: 'Admin', allowed_roles: ['admin'], deskripsi: 'Mengunduh rekapitulasi nilai akhir dan absensi dalam format JSON.' },
+];
+
+export function dbGetMenuAccess(): MenuAccess[] {
+  initializeLocalStorage();
+  const raw = localStorage.getItem('SIM_PKL_MENU_ACCESS');
+  if (!raw) {
+    localStorage.setItem('SIM_PKL_MENU_ACCESS', JSON.stringify(DEFAULT_MENU_ACCESS));
+    return DEFAULT_MENU_ACCESS;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error('Failed to parse menu access, resetting to default:', e);
+    localStorage.setItem('SIM_PKL_MENU_ACCESS', JSON.stringify(DEFAULT_MENU_ACCESS));
+    return DEFAULT_MENU_ACCESS;
+  }
+}
+
+export function dbSaveMenuAccess(menuAccess: MenuAccess[]): { success: boolean } {
+  localStorage.setItem('SIM_PKL_MENU_ACCESS', JSON.stringify(menuAccess));
+  return { success: true };
+}
+
+export function isSuperAdmin(user: PklUser | null): boolean {
+  if (!user) return false;
+  const emailLower = user.email.toLowerCase();
+  return user.role === 'admin' && (emailLower === 'kangdanu93@gmail.com' || emailLower === 'admin@simpkl.com');
 }
 
 // Initialize immediately

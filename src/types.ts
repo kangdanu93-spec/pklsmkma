@@ -87,3 +87,12 @@ export interface PklClass {
   jurusan: string;
 }
 
+export interface MenuAccess {
+  id: string;
+  nama_menu: string;
+  kategori: 'Utama' | 'Siswa' | 'Guru' | 'Industri' | 'Admin';
+  allowed_roles: UserRole[];
+  deskripsi: string;
+}
+
+

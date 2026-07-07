@@ -5,12 +5,12 @@ import {
 } from 'lucide-react';
 
 // Models & Types
-import { PklUser, PklInstansi, PklJournal, PklAttendance, PklPlacement, PklEvaluation, Announcement } from './types';
+import { PklUser, PklInstansi, PklJournal, PklAttendance, PklPlacement, PklEvaluation, Announcement, MenuAccess } from './types';
 
 // DB Operations
 import { 
   dbGetUsers, dbGetInstansi, dbGetPlacements, dbGetJournals, 
-  dbGetAttendance, dbGetEvaluations, dbGetAnnouncements 
+  dbGetAttendance, dbGetEvaluations, dbGetAnnouncements, dbGetMenuAccess, isSuperAdmin
 } from './utils/localDb';
 import { isSupabaseConnected, getSupabaseConfig, getSupabaseClient } from './supabaseClient';
 
@@ -32,6 +32,7 @@ export default function App() {
   const [attendanceLogs, setAttendanceLogs] = useState<PklAttendance[]>([]);
   const [evaluations, setEvaluations] = useState<PklEvaluation[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [menuAccessList, setMenuAccessList] = useState<MenuAccess[]>([]);
   
   // Loading & UI control
   const [globalLoading, setGlobalLoading] = useState(true);
@@ -49,6 +50,10 @@ export default function App() {
   const loadGlobalData = async () => {
     setGlobalLoading(true);
     try {
+      // Load menu permissions
+      const menuPerms = dbGetMenuAccess();
+      setMenuAccessList(menuPerms);
+
       // 1. Check database connection status
       const connected = isSupabaseConnected();
       setIsDbConnected(connected);
@@ -150,6 +155,15 @@ export default function App() {
     loadGlobalData();
   };
 
+  const isMenuAllowed = (menuId: string): boolean => {
+    if (!currentUser) return true; // Default true if no user (login screen or basic flow)
+    if (isSuperAdmin(currentUser)) return true; // Super admin can access anything
+    
+    const menu = menuAccessList.find(m => m.id === menuId);
+    if (!menu) return true;
+    return menu.allowed_roles.includes(currentUser.role);
+  };
+
   if (globalLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center font-sans">
@@ -179,14 +193,16 @@ export default function App() {
           </p>
         </div>
         
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={() => setActiveMenu('supabase')}
-            className="text-[11px] font-semibold text-indigo-300 hover:text-indigo-200 hover:underline transition-all flex items-center gap-1 bg-transparent border-none cursor-pointer"
-          >
-            <Settings className="w-3.5 h-3.5" /> {isDbConnected ? 'Atur Supabase' : 'Hubungkan ke Supabase'}
-          </button>
-        </div>
+        {isSuperAdmin(currentUser) && (
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setActiveMenu('supabase')}
+              className="text-[11px] font-semibold text-indigo-300 hover:text-indigo-200 hover:underline transition-all flex items-center gap-1 bg-transparent border-none cursor-pointer"
+            >
+              <Settings className="w-3.5 h-3.5" /> {isDbConnected ? 'Atur Supabase' : 'Hubungkan ke Supabase'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* TOP HEADER */}
@@ -201,7 +217,12 @@ export default function App() {
             <div>
               <h1 className="text-lg font-bold text-slate-900 tracking-tight flex items-center gap-1.5">
                 <span>SIM PKL SMK MA</span> 
-                <span className="text-xs bg-indigo-50 text-indigo-700 font-semibold px-2 py-0.5 rounded border border-indigo-100">v1.2</span>
+                {isSuperAdmin(currentUser) && (
+                  <span className="text-[10px] bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded border border-red-200 uppercase tracking-wider animate-pulse">Super Admin</span>
+                )}
+                {!isSuperAdmin(currentUser) && (
+                  <span className="text-xs bg-indigo-50 text-indigo-700 font-semibold px-2 py-0.5 rounded border border-indigo-100">v1.2</span>
+                )}
               </h1>
               <p className="text-xs text-slate-400 font-medium">Sistem Informasi Manajemen Praktik Kerja Lapangan</p>
             </div>
@@ -210,30 +231,36 @@ export default function App() {
           {/* User Nav and Profile */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <nav className="flex items-center gap-1">
-              <button
-                onClick={() => setActiveMenu('dashboard')}
-                className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  activeMenu === 'dashboard' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:bg-slate-50'
-                }`}
-              >
-                <LayoutDashboard className="w-4 h-4" /> Dashboard PKL
-              </button>
-              <button
-                onClick={() => setActiveMenu('stats')}
-                className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  activeMenu === 'stats' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:bg-slate-50'
-                }`}
-              >
-                <BarChart3 className="w-4 h-4" /> Statistik & Hasil
-              </button>
-              <button
-                onClick={() => setActiveMenu('supabase')}
-                className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  activeMenu === 'supabase' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:bg-slate-50'
-                }`}
-              >
-                <Database className="w-4 h-4" /> Setup Supabase
-              </button>
+              {(!currentUser || isMenuAllowed('dashboard_pkl')) && (
+                <button
+                  onClick={() => setActiveMenu('dashboard')}
+                  className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    activeMenu === 'dashboard' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  <LayoutDashboard className="w-4 h-4" /> Dashboard PKL
+                </button>
+              )}
+              {currentUser && isMenuAllowed('statistik_hasil') && (
+                <button
+                  onClick={() => setActiveMenu('stats')}
+                  className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    activeMenu === 'stats' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  <BarChart3 className="w-4 h-4" /> Statistik & Hasil
+                </button>
+              )}
+              {isSuperAdmin(currentUser) && (
+                <button
+                  onClick={() => setActiveMenu('supabase')}
+                  className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    activeMenu === 'supabase' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  <Database className="w-4 h-4" /> Setup Supabase
+                </button>
+              )}
             </nav>
 
             {currentUser && (
@@ -256,60 +283,6 @@ export default function App() {
           </div>
         </div>
       </header>
-
-      {/* QUICK LOGIN SIMULATOR ONCE LOGGED IN */}
-      {currentUser && (
-        <section className="bg-indigo-50 border-y border-indigo-100 px-4 sm:px-6 lg:px-8 py-3">
-          <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs text-indigo-950">
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-indigo-600 text-white font-bold uppercase text-[9px] tracking-wider animate-pulse flex items-center gap-1">
-                <Flame className="w-3 h-3" /> Sandbox Mode
-              </span>
-              <p className="font-semibold text-slate-700">
-                Uji Coba Alur PKL dengan mengganti peran akun di bawah ini secara instan:
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2.5">
-              <span className="font-medium text-slate-500">Pilih Akun:</span>
-              <select
-                value={currentUser.id}
-                onChange={(e) => handleUserSessionSwitch(e.target.value)}
-                className="px-3 py-1.5 bg-white border border-indigo-200 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              >
-                <optgroup label="Siswa (Dapat Isi Jurnal & Absensi)">
-                  {users.filter(u => u.role === 'siswa').map(u => (
-                    <option key={u.id} value={u.id}>Siswa: {u.nama} ({u.id_instansi ? 'Aktif PKL' : 'Draft Penempatan'})</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Guru Pembimbing (Dapat Menilai & Verifikasi)">
-                  {users.filter(u => u.role === 'guru').map(u => (
-                    <option key={u.id} value={u.id}>Guru: {u.nama}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Mitra Industri (Dapat Menyetujui Absen & Beri Nilai)">
-                  {users.filter(u => u.role === 'industri').map(u => (
-                    <option key={u.id} value={u.id}>Industri: {u.nama}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Admin (Plotting Guru, Kelola Instansi, Rekap Nilai)">
-                  {users.filter(u => u.role === 'admin').map(u => (
-                    <option key={u.id} value={u.id}>Admin: {u.nama}</option>
-                  ))}
-                </optgroup>
-              </select>
-              
-              <button
-                onClick={loadGlobalData}
-                title="Refresh Data dari Database"
-                className="p-1.5 rounded-lg border border-indigo-200 bg-white hover:bg-indigo-100 text-indigo-700 transition-all flex items-center justify-center shrink-0"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        </section>
-      )}
 
       {/* MAIN LAYOUT FRAME */}
       <main className="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -395,7 +368,7 @@ export default function App() {
       {/* FOOTER */}
       <footer className="bg-white border-t border-slate-100 py-6 mt-12 text-center text-xs text-slate-400">
         <div className="max-w-7xl mx-auto px-4">
-          <p className="font-medium text-slate-500">SIM PKL SMK MA &copy; {new Date().getFullYear()} &bull; Sistem Manajemen Praktik Kerja Lapangan Terintegrasi Supabase</p>
+          <p className="font-medium text-slate-500">SIM PKL SMK MA &copy; {new Date().getFullYear()} &bull; Sistem Manajemen Praktik Kerja Lapangan</p>
           <p className="text-[10px] mt-1 text-slate-400">Dioptimalkan untuk Siswa, Guru Pembimbing Sekolah, dan Mitra Industri Lapangan.</p>
         </div>
       </footer>
