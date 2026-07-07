@@ -180,29 +180,6 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50/65 flex flex-col font-sans antialiased text-slate-800" id="main-applet">
       
-      {/* GLOBAL BANNER INTEGRATION STATUS */}
-      <div className="bg-slate-900 text-white text-xs px-6 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2 border-b border-slate-800 shadow-sm">
-        <div className="flex items-center gap-2">
-          <span className="flex h-2 w-2 relative">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-          </span>
-          <p className="font-medium text-slate-300">
-            <span>Database Cloud Aktif: <strong className="text-white font-semibold">Supabase Cloud Online Production</strong></span>
-          </p>
-        </div>
-        
-        {(!currentUser || isSuperAdmin(currentUser)) && (
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={() => setActiveMenu('supabase')}
-              className="text-[11px] font-semibold text-indigo-300 hover:text-indigo-200 hover:underline transition-all flex items-center gap-1 bg-transparent border-none cursor-pointer"
-            >
-              <Settings className="w-3.5 h-3.5" /> Konfigurasi Database
-            </button>
-          </div>
-        )}
-      </div>
 
       {/* TOP HEADER */}
       <header className="bg-white border-b border-slate-100 sticky top-0 z-40 shadow-sm">

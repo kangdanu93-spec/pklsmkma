@@ -3,7 +3,7 @@ import {
   Building2, Users, FileCheck, Calendar, Star, RefreshCw, Plus, Trash2, 
   UserPlus, Check, X, ClipboardList, ShieldAlert, Download, Phone, MapPin,
   FileSpreadsheet, UploadCloud, Shield, BookOpen, GraduationCap, UserCheck,
-  Settings
+  Settings, Megaphone, Search, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { PklUser, PklInstansi, PklPlacement, PklEvaluation, Announcement, UserRole, PklClass, MenuAccess } from '../types';
@@ -48,8 +48,14 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
   const [classesList, setClassesList] = useState<PklClass[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Active sub-tab state ('placements' | 'students' | 'teachers' | 'users' | 'companies' | 'reports' | 'classes' | 'permissions')
-  const [activeTab, setActiveTab] = useState<'placements' | 'students' | 'teachers' | 'users' | 'companies' | 'reports' | 'classes' | 'permissions'>('placements');
+  // Active sub-tab state ('placements' | 'students' | 'teachers' | 'users' | 'companies' | 'reports' | 'classes' | 'permissions' | 'announcements')
+  const [activeTab, setActiveTab] = useState<'placements' | 'students' | 'teachers' | 'users' | 'companies' | 'reports' | 'classes' | 'permissions' | 'announcements'>('placements');
+
+  // Plotting list filter & pagination states
+  const [plottingSearch, setPlottingSearch] = useState('');
+  const [plottingStatusFilter, setPlottingStatusFilter] = useState<'all' | 'belum_diplot' | 'sudah_diplot'>('all');
+  const [plottingClassFilter, setPlottingClassFilter] = useState('');
+  const [plottingPage, setPlottingPage] = useState(1);
 
   // Dynamic dropdown options calculated from master classes state, with static fallbacks
   const KELAS_OPTIONS = classesList.length > 0
@@ -985,6 +991,20 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                   <span className="truncate">Laporan Rekap Nilai</span>
                 </button>
               )}
+
+              {isTabAllowed('admin_pengumuman') && (
+                <button
+                  onClick={() => setActiveTab('announcements')}
+                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold rounded-xl transition-all ${
+                    activeTab === 'announcements' 
+                      ? 'bg-indigo-600 text-white shadow-sm font-bold' 
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
+                  }`}
+                >
+                  <Megaphone className={`w-4 h-4 shrink-0 ${activeTab === 'announcements' ? 'text-white' : 'text-slate-400'}`} />
+                  <span className="truncate">Kelola Pengumuman</span>
+                </button>
+              )}
               
               <div className="h-px bg-slate-200 my-1.5" />
               
@@ -1008,7 +1028,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
             
             {/* LEFT/MAIN MODULE COLUMN (based on activeTab) */}
-            <div className="xl:col-span-8 space-y-8">
+            <div className={`${['students', 'teachers', 'users', 'companies', 'classes', 'permissions'].includes(activeTab) ? 'xl:col-span-8' : 'xl:col-span-12'} space-y-8`}>
           
           {/* TAB 1: PLACEMENTS & PLOTTING */}
           {activeTab === 'placements' && (
@@ -1081,86 +1101,218 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
               </div>
 
               {/* STUDENT GURU PLOTTING SECTION */}
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-                <h3 className="text-base font-bold text-slate-800 mb-4">Pemetaan (Plotting) Guru Pembimbing Siswa</h3>
-                
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="border-b border-slate-100 text-slate-400 font-semibold uppercase tracking-wider">
-                        <th className="pb-3 pr-4">Nama Siswa</th>
-                        <th className="pb-3 px-4">Instansi PKL</th>
-                        <th className="pb-3 px-4">Guru Pembimbing</th>
-                        <th className="pb-3 pl-4 text-right">Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50 text-slate-600">
-                      {users.filter(u => u.role === 'siswa').map((stud) => {
-                        const isEditing = editingStudentId === stud.id;
-                        const company = instansiList.find(i => i.id === stud.id_instansi);
-                        const currentTeacher = teachers.find(t => t.id === stud.id_pembimbing);
-                        
-                        return (
-                          <tr key={stud.id} className="hover:bg-slate-50/50">
-                            <td className="py-3 pr-4">
-                              <span className="font-semibold text-slate-800 block">{stud.nama}</span>
-                              <span className="text-[10px] text-slate-400">NISN: {stud.nomor_induk}</span>
-                            </td>
-                            <td className="py-3 px-4 font-medium text-slate-700">
-                              {company?.nama_instansi || 'Belum Penempatan'}
-                            </td>
-                            <td className="py-3 px-4">
-                              {isEditing ? (
-                                <select
-                                  value={tempPembimbingId}
-                                  onChange={(e) => setTempPembimbingId(e.target.value)}
-                                  className="px-2 py-1 rounded border border-slate-200 focus:outline-none bg-white text-slate-800"
-                                >
-                                  <option value="">-- Pilih Guru --</option>
-                                  {teachers.map(t => (
-                                    <option key={t.id} value={t.id}>{t.nama}</option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <span className={`font-medium ${currentTeacher ? 'text-indigo-600' : 'text-slate-400 italic'}`}>
-                                  {currentTeacher ? currentTeacher.nama : 'Belum diplot'}
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-3 pl-4 text-right">
-                              {isEditing ? (
-                                <div className="flex gap-1 justify-end">
-                                  <button
-                                    onClick={() => setEditingStudentId(null)}
-                                    className="px-2 py-1 rounded bg-slate-100 text-slate-600 font-semibold"
-                                  >
-                                    Batal
-                                  </button>
-                                  <button
-                                    onClick={() => handleUpdatePembimbing(stud.id)}
-                                    className="px-2 py-1 rounded bg-indigo-600 text-white font-semibold flex items-center gap-0.5"
-                                  >
-                                    <Check className="w-3 h-3" /> Simpan
-                                  </button>
-                                </div>
-                              ) : (
-                                <button
-                                  onClick={() => {
-                                    setEditingStudentId(stud.id);
-                                    setTempPembimbingId(stud.id_pembimbing || '');
-                                  }}
-                                  className="text-xs text-indigo-600 hover:underline font-semibold"
-                                >
-                                  Plot Guru
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-800">Pemetaan (Plotting) Guru Pembimbing Siswa</h3>
+                    <p className="text-xs text-slate-400">Hubungkan setiap siswa magang dengan Guru Pembimbing masing-masing.</p>
+                  </div>
+
+                  {/* Filters Grid */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Search Input */}
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                      <input
+                        type="text"
+                        placeholder="Cari nama atau NISN..."
+                        value={plottingSearch}
+                        onChange={(e) => {
+                          setPlottingSearch(e.target.value);
+                          setPlottingPage(1);
+                        }}
+                        className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-800 w-48 shadow-xs"
+                      />
+                    </div>
+
+                    {/* Class Dropdown */}
+                    <select
+                      value={plottingClassFilter}
+                      onChange={(e) => {
+                        setPlottingClassFilter(e.target.value);
+                        setPlottingPage(1);
+                      }}
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none bg-white text-slate-700 shadow-xs"
+                    >
+                      <option value="">Semua Kelas</option>
+                      {KELAS_OPTIONS.map((k) => (
+                        <option key={k} value={k}>{k}</option>
+                      ))}
+                    </select>
+
+                    {/* Status Dropdown */}
+                    <select
+                      value={plottingStatusFilter}
+                      onChange={(e) => {
+                        setPlottingStatusFilter(e.target.value as any);
+                        setPlottingPage(1);
+                      }}
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none bg-white text-slate-700 shadow-xs"
+                    >
+                      <option value="all">Semua Status Plotting</option>
+                      <option value="belum_diplot">Belum diplot</option>
+                      <option value="sudah_diplot">Sudah diplot</option>
+                    </select>
+                  </div>
                 </div>
+
+                {(() => {
+                  const plottingStudents = users.filter(u => u.role === 'siswa');
+                  const filteredPlottingStudents = plottingStudents.filter((stud) => {
+                    const searchLower = plottingSearch.toLowerCase();
+                    const matchesSearch = !plottingSearch || 
+                      stud.nama.toLowerCase().includes(searchLower) || 
+                      (stud.nomor_induk || '').toLowerCase().includes(searchLower) ||
+                      (stud.kelas || '').toLowerCase().includes(searchLower);
+
+                    let matchesStatus = true;
+                    if (plottingStatusFilter === 'belum_diplot') {
+                      matchesStatus = !stud.id_pembimbing;
+                    } else if (plottingStatusFilter === 'sudah_diplot') {
+                      matchesStatus = !!stud.id_pembimbing;
+                    }
+
+                    const matchesClass = !plottingClassFilter || stud.kelas === plottingClassFilter;
+                    return matchesSearch && matchesStatus && matchesClass;
+                  });
+
+                  const itemsPerPage = 8;
+                  const totalPlottingPages = Math.ceil(filteredPlottingStudents.length / itemsPerPage) || 1;
+                  const currentPlottingPage = Math.min(plottingPage, totalPlottingPages);
+                  const paginatedPlottingStudents = filteredPlottingStudents.slice(
+                    (currentPlottingPage - 1) * itemsPerPage,
+                    currentPlottingPage * itemsPerPage
+                  );
+
+                  return (
+                    <div className="space-y-4">
+                      {paginatedPlottingStudents.length === 0 ? (
+                        <div className="text-center py-10">
+                          <p className="text-xs text-slate-400 italic font-medium">Tidak ada data siswa yang cocok dengan filter aktif.</p>
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="border-b border-slate-100 text-slate-400 font-semibold uppercase tracking-wider">
+                                <th className="pb-3 pr-4">Nama Siswa</th>
+                                <th className="pb-3 px-4">Instansi PKL</th>
+                                <th className="pb-3 px-4">Guru Pembimbing</th>
+                                <th className="pb-3 pl-4 text-right">Aksi</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50 text-slate-600">
+                              {paginatedPlottingStudents.map((stud) => {
+                                const isEditing = editingStudentId === stud.id;
+                                const company = instansiList.find(i => i.id === stud.id_instansi);
+                                const currentTeacher = teachers.find(t => t.id === stud.id_pembimbing);
+                                
+                                return (
+                                  <tr key={stud.id} className="hover:bg-slate-50/50">
+                                    <td className="py-3 pr-4">
+                                      <span className="font-semibold text-slate-800 block">{stud.nama}</span>
+                                      <span className="text-[10px] text-slate-400">{stud.kelas || 'No Kelas'} • NISN: {stud.nomor_induk}</span>
+                                    </td>
+                                    <td className="py-3 px-4 font-medium text-slate-700">
+                                      {company?.nama_instansi || 'Belum Penempatan'}
+                                    </td>
+                                    <td className="py-3 px-4">
+                                      {isEditing ? (
+                                        <select
+                                          value={tempPembimbingId}
+                                          onChange={(e) => setTempPembimbingId(e.target.value)}
+                                          className="px-2 py-1 rounded border border-slate-200 focus:outline-none bg-white text-slate-800"
+                                        >
+                                          <option value="">-- Pilih Guru --</option>
+                                          {teachers.map(t => (
+                                            <option key={t.id} value={t.id}>{t.nama}</option>
+                                          ))}
+                                        </select>
+                                      ) : (
+                                        <span className={`font-medium ${currentTeacher ? 'text-indigo-600' : 'text-slate-400 italic'}`}>
+                                          {currentTeacher ? currentTeacher.nama : 'Belum diplot'}
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="py-3 pl-4 text-right">
+                                      {isEditing ? (
+                                        <div className="flex gap-1 justify-end">
+                                          <button
+                                            onClick={() => setEditingStudentId(null)}
+                                            className="px-2 py-1 rounded bg-slate-100 text-slate-600 font-semibold"
+                                          >
+                                            Batal
+                                          </button>
+                                          <button
+                                            onClick={() => handleUpdatePembimbing(stud.id)}
+                                            className="px-2 py-1 rounded bg-indigo-600 text-white font-semibold flex items-center gap-0.5"
+                                          >
+                                            <Check className="w-3 h-3" /> Simpan
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <button
+                                          onClick={() => {
+                                            setEditingStudentId(stud.id);
+                                            setTempPembimbingId(stud.id_pembimbing || '');
+                                          }}
+                                          className="text-xs text-indigo-600 hover:underline font-semibold"
+                                        >
+                                          Plot Guru
+                                        </button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      {/* Pagination Controls */}
+                      {totalPlottingPages > 1 && (
+                        <div className="flex flex-col sm:flex-row items-center justify-between border-t border-slate-100 pt-4 gap-3 text-xs text-slate-500">
+                          <p className="font-medium text-slate-400">
+                            Menampilkan <span className="font-bold text-slate-700">{Math.min((currentPlottingPage - 1) * itemsPerPage + 1, filteredPlottingStudents.length)}</span> - <span className="font-bold text-slate-700">{Math.min(currentPlottingPage * itemsPerPage, filteredPlottingStudents.length)}</span> dari <span className="font-bold text-slate-700">{filteredPlottingStudents.length}</span> siswa
+                          </p>
+                          
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => setPlottingPage(prev => Math.max(prev - 1, 1))}
+                              disabled={currentPlottingPage === 1}
+                              className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                            >
+                              <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            
+                            {Array.from({ length: totalPlottingPages }, (_, i) => i + 1).map((pg) => (
+                              <button
+                                key={pg}
+                                onClick={() => setPlottingPage(pg)}
+                                className={`w-7 h-7 text-xs font-bold rounded-lg transition-all ${
+                                  currentPlottingPage === pg
+                                    ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
+                                    : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 font-semibold'
+                                }`}
+                              >
+                                {pg}
+                              </button>
+                            ))}
+
+                            <button
+                              onClick={() => setPlottingPage(prev => Math.min(prev + 1, totalPlottingPages))}
+                              disabled={currentPlottingPage === totalPlottingPages}
+                              className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                            >
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
             </div>
@@ -2149,10 +2301,100 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
             </div>
           )}
 
+          {/* TAB: ANNOUNCEMENTS MANAGEMENT (MAIN PANE) */}
+          {activeTab === 'announcements' && (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-6" id="admin-announcements-mgmt">
+              <div>
+                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <Megaphone className="w-5 h-5 text-indigo-600" /> Kelola Pengumuman Koordinator PKL
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">Posting pengumuman penting yang akan muncul secara real-time di dashboard seluruh siswa, guru pembimbing, dan perwakilan industri.</p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* Left Side: Create form */}
+                <div className="lg:col-span-5 space-y-4">
+                  <div className="bg-slate-50/50 rounded-2xl border border-slate-100 p-5 space-y-4">
+                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <ClipboardList className="w-4 h-4 text-indigo-600" /> Tulis Pengumuman Koordinator
+                    </h4>
+
+                    <form onSubmit={handleAddAnnouncement} className="space-y-4 text-xs">
+                      <div>
+                        <label className="block font-semibold text-slate-600 mb-1.5">Judul Pengumuman</label>
+                        <input
+                          type="text"
+                          required
+                          value={annTitle}
+                          onChange={(e) => setAnnTitle(e.target.value)}
+                          placeholder="Contoh: Batas Akhir Penyerahan Jurnal PKL..."
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-800"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold text-slate-600 mb-1.5">Konten Pengumuman</label>
+                        <textarea
+                          rows={5}
+                          required
+                          value={annContent}
+                          onChange={(e) => setAnnContent(e.target.value)}
+                          placeholder="Tulis rincian informasi pengumuman di sini secara lengkap..."
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-800 leading-relaxed"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <Megaphone className="w-4 h-4" /> Posting Pengumuman
+                      </button>
+
+                      {annSuccess && <p className="text-[11px] text-emerald-600 font-bold bg-emerald-50 border border-emerald-100 p-2 rounded-lg">{annSuccess}</p>}
+                    </form>
+                  </div>
+                </div>
+
+                {/* Right Side: Announcements list */}
+                <div className="lg:col-span-7 space-y-4">
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Histori Pengumuman Anda</h4>
+                  
+                  {announcements.filter(a => a.author.includes('Koordinator')).length === 0 ? (
+                    <div className="text-center py-12 border border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+                      <Megaphone className="w-8 h-8 text-slate-350 mx-auto mb-2 opacity-55" />
+                      <p className="text-xs text-slate-400 italic">Belum ada pengumuman yang di-posting.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3.5 max-h-[500px] overflow-y-auto pr-1">
+                      {announcements.filter(a => a.author.includes('Koordinator')).map(ann => (
+                        <div key={ann.id} className="p-4 bg-white hover:shadow-md hover:border-slate-200 transition-all rounded-2xl border border-slate-100 text-xs flex justify-between items-start gap-4 shadow-xs">
+                          <div className="space-y-1.5">
+                            <strong className="text-sm text-slate-800 font-extrabold">{ann.judul}</strong>
+                            <p className="text-slate-600 whitespace-pre-wrap leading-relaxed">{ann.konten}</p>
+                            <span className="text-[10px] text-slate-400 font-medium block mt-1">{ann.tanggal}</span>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteAnn(ann.id)}
+                            className="text-rose-500 hover:text-rose-700 p-2 bg-rose-50 hover:bg-rose-100 border border-rose-100/50 rounded-xl transition-colors shrink-0"
+                            title="Hapus Pengumuman"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
             </div>
 
             {/* RIGHT COLUMN: ACTION FORMS (USER ADD, INSTANSI ADD, ANNOUNCEMENTS) */}
-            <div className="xl:col-span-4 space-y-8">
+            {['students', 'teachers', 'users', 'companies', 'classes', 'permissions'].includes(activeTab) && (
+              <div className="xl:col-span-4 space-y-8">
           
           {/* PERMISSIONS INFO PANEL */}
           {activeTab === 'permissions' && (
@@ -2468,76 +2710,8 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
             </div>
           )}
 
-          {/* GENERAL KOORDINATOR ANNOUNCEMENT FORM */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4">
-            <h4 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
-              <ClipboardList className="w-4.5 h-4.5 text-indigo-600" /> Tulis Pengumuman Koordinator
-            </h4>
-
-            <form onSubmit={handleAddAnnouncement} className="space-y-3.5 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-500 mb-1">Judul Pengumuman</label>
-                <input
-                  type="text"
-                  required
-                  value={annTitle}
-                  onChange={(e) => setAnnTitle(e.target.value)}
-                  placeholder="Batas Akhir Penyerahan Jurnal..."
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none bg-white text-slate-800"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-500 mb-1">Konten Pengumuman</label>
-                <textarea
-                  rows={4}
-                  required
-                  value={annContent}
-                  onChange={(e) => setAnnContent(e.target.value)}
-                  placeholder="Tulis informasi pengumuman di sini..."
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none bg-white text-slate-800"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-2 bg-slate-800 hover:bg-slate-900 text-white font-semibold rounded-lg transition-all"
-              >
-                Posting Pengumuman
-              </button>
-
-              {annSuccess && <p className="text-[10px] text-emerald-600 font-semibold">{annSuccess}</p>}
-            </form>
-          </div>
-
-          {/* ACTIVE ANNOUNCEMENTS FROM KOORDINATOR */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-3">
-            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Histori Pengumuman Anda</h4>
-            
-            {announcements.filter(a => a.author.includes('Koordinator')).length === 0 ? (
-              <p className="text-xs text-slate-400 italic">Belum ada pengumuman.</p>
-            ) : (
-              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
-                {announcements.filter(a => a.author.includes('Koordinator')).map(ann => (
-                  <div key={ann.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs flex justify-between gap-3">
-                    <div>
-                      <strong className="text-slate-800 font-bold">{ann.judul}</strong>
-                      <p className="text-slate-500 mt-1 whitespace-pre-wrap">{ann.konten}</p>
-                      <span className="text-[9px] text-slate-400 block mt-1.5">{ann.tanggal}</span>
-                    </div>
-                    <button
-                      onClick={() => handleDeleteAnn(ann.id)}
-                      className="text-rose-500 p-1 hover:bg-rose-50 rounded"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
               </div>
             )}
-          </div>
-
-            </div>
 
           </div>
         </div>
