@@ -196,7 +196,7 @@ export default function App() {
           </p>
         </div>
         
-        {isSuperAdmin(currentUser) && (
+        {(!currentUser || isSuperAdmin(currentUser)) && (
           <div className="flex items-center gap-4">
             <button 
               onClick={() => setActiveMenu('supabase')}

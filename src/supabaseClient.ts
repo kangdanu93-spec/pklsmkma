@@ -45,19 +45,28 @@ export function saveSupabaseConfig(url: string, anonKey: string) {
 
 export async function syncSupabaseConfigFromServer(): Promise<boolean> {
   try {
+    const localUrl = localStorage.getItem('SIM_PKL_SUPABASE_URL');
+    const localKey = localStorage.getItem('SIM_PKL_SUPABASE_ANON_KEY');
+
     const res = await fetch('/api/supabase-config');
     if (res.ok) {
       const data = await res.json();
       if (data.url && data.anonKey) {
-        const localUrl = localStorage.getItem('SIM_PKL_SUPABASE_URL');
-        const localKey = localStorage.getItem('SIM_PKL_SUPABASE_ANON_KEY');
-        
         if (localUrl !== data.url || localKey !== data.anonKey) {
           localStorage.setItem('SIM_PKL_SUPABASE_URL', data.url.trim());
           localStorage.setItem('SIM_PKL_SUPABASE_ANON_KEY', data.anonKey.trim());
           supabaseInstance = null; // Reset instance to force re-creation
           return true; // Config was updated
         }
+      } else if (localUrl && localKey) {
+        // Server config is empty, but local config is populated.
+        // Self-heal: Upload local config to server so other sessions can sync it.
+        console.log('Server config is empty. Uploading local Supabase config to server...');
+        await fetch('/api/save-supabase-config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: localUrl.trim(), anonKey: localKey.trim() })
+        });
       }
     }
   } catch (err) {
