@@ -298,6 +298,7 @@ export const DEFAULT_MENU_ACCESS: MenuAccess[] = [
 
   { id: 'admin_plotting', nama_menu: 'Plotting & Pengajuan PKL', kategori: 'Admin', allowed_roles: ['admin'], deskripsi: 'Memetakan pembimbing sekolah dan menyetujui pengajuan tempat PKL.' },
   { id: 'admin_siswa', nama_menu: 'Master Data Siswa', kategori: 'Admin', allowed_roles: ['admin'], deskripsi: 'Mengelola biodata lengkap siswa dan impor data via Excel.' },
+  { id: 'admin_guru', nama_menu: 'Master Guru Pembimbing', kategori: 'Admin', allowed_roles: ['admin'], deskripsi: 'Mengelola biodata lengkap guru pembimbing dan impor data via Excel.' },
   { id: 'admin_pengguna', nama_menu: 'Kelola Pengguna', kategori: 'Admin', allowed_roles: ['admin'], deskripsi: 'Mengelola login, password, dan level hak akses user lain.' },
   { id: 'admin_instansi', nama_menu: 'Kelola Instansi Mitra', kategori: 'Admin', allowed_roles: ['admin'], deskripsi: 'Mengelola daftar perusahaan, kuota magang, dan kontak HRD.' },
   { id: 'admin_kelas', nama_menu: 'Master Kelas', kategori: 'Admin', allowed_roles: ['admin'], deskripsi: 'Mengelola daftar kelas dan jurusan aktif.' },
@@ -312,7 +313,19 @@ export function dbGetMenuAccess(): MenuAccess[] {
     return DEFAULT_MENU_ACCESS;
   }
   try {
-    return JSON.parse(raw);
+    const saved: MenuAccess[] = JSON.parse(raw);
+    const merged = [...saved];
+    let changed = false;
+    DEFAULT_MENU_ACCESS.forEach(defItem => {
+      if (!merged.some(item => item.id === defItem.id)) {
+        merged.push(defItem);
+        changed = true;
+      }
+    });
+    if (changed) {
+      localStorage.setItem('SIM_PKL_MENU_ACCESS', JSON.stringify(merged));
+    }
+    return merged;
   } catch (e) {
     console.error('Failed to parse menu access, resetting to default:', e);
     localStorage.setItem('SIM_PKL_MENU_ACCESS', JSON.stringify(DEFAULT_MENU_ACCESS));

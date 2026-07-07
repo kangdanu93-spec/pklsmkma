@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, BookOpen, Send, CheckCircle, AlertCircle, RefreshCw, Star, Info, FileText, CheckCircle2, XCircle } from 'lucide-react';
+import { Calendar, Clock, BookOpen, Send, CheckCircle, AlertCircle, RefreshCw, Star, Info, FileText, CheckCircle2, XCircle, MapPin, Navigation, Compass, Globe } from 'lucide-react';
 import { PklUser, PklInstansi, PklJournal, PklAttendance, PklPlacement, PklEvaluation, Announcement, MenuAccess } from '../types';
 import { dbGetJournals, dbSaveJournal, dbGetAttendance, dbSaveAttendance, dbGetPlacements, dbSavePlacement, dbGetInstansi, dbGetEvaluations, dbGetMenuAccess } from '../utils/localDb';
 
@@ -40,6 +40,13 @@ export default function StudentDashboard({ student, instansiList, announcements 
   const [attKeterangan, setAttKeterangan] = useState('');
   const [attSuccess, setAttSuccess] = useState('');
 
+  // Live Clock & GPS Geolocation States
+  const [liveDateTime, setLiveDateTime] = useState<Date>(new Date());
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+
   const [applyInstansiId, setApplyInstansiId] = useState('');
   const [applyStart, setApplyStart] = useState('2026-07-01');
   const [applyEnd, setApplyEnd] = useState('2026-10-01');
@@ -48,6 +55,47 @@ export default function StudentDashboard({ student, instansiList, announcements 
   useEffect(() => {
     fetchStudentData();
   }, [student.id]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setLiveDateTime(new Date());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const getCoordinates = () => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation tidak didukung oleh browser Anda.');
+      return;
+    }
+    setIsLocating(true);
+    setLocationError(null);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLatitude(position.coords.latitude);
+        setLongitude(position.coords.longitude);
+        setIsLocating(false);
+      },
+      (error) => {
+        console.error('Error getting location:', error);
+        let errorMsg = 'Gagal mendapatkan lokasi GPS.';
+        if (error.code === error.PERMISSION_DENIED) {
+          errorMsg = 'Akses lokasi ditolak. Silakan aktifkan izin GPS pada browser.';
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          errorMsg = 'Informasi lokasi tidak tersedia.';
+        } else if (error.code === error.TIMEOUT) {
+          errorMsg = 'Waktu permintaan lokasi habis.';
+        }
+        setLocationError(errorMsg);
+        setIsLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
+
+  useEffect(() => {
+    getCoordinates();
+  }, []);
 
   const fetchStudentData = async () => {
     setLoading(true);
@@ -120,7 +168,10 @@ export default function StudentDashboard({ student, instansiList, announcements 
       return;
     }
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    // Capture precise current submission time and date
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const currentTimeStr = now.toTimeString().split(' ')[0].substring(0, 5);
     
     // Check if clocked in today
     const existingLog = attendanceLogs.find(a => a.tanggal === todayStr);
@@ -134,7 +185,9 @@ export default function StudentDashboard({ student, instansiList, announcements 
       // Clock out
       const updatedLog: PklAttendance = {
         ...existingLog,
-        jam_keluar: new Date().toTimeString().split(' ')[0].substring(0, 5),
+        jam_keluar: currentTimeStr,
+        latitude_keluar: latitude || undefined,
+        longitude_keluar: longitude || undefined,
       };
 
       const res = await dbSaveAttendance(updatedLog);
@@ -149,10 +202,12 @@ export default function StudentDashboard({ student, instansiList, announcements 
         id: `att-${Date.now()}`,
         id_siswa: student.id,
         tanggal: todayStr,
-        jam_masuk: new Date().toTimeString().split(' ')[0].substring(0, 5),
+        jam_masuk: currentTimeStr,
         status: attStatus,
         keterangan: attKeterangan,
-        status_verifikasi: 'pending'
+        status_verifikasi: 'pending',
+        latitude: latitude || undefined,
+        longitude: longitude || undefined,
       };
 
       const res = await dbSaveAttendance(newLog);
@@ -306,102 +361,273 @@ export default function StudentDashboard({ student, instansiList, announcements 
           {/* 2. MENU PRESENSI HARIAN */}
           {isFeatureAllowed('siswa_presensi') && placement?.status === 'disetujui' && (
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6" id="attendance-section">
-              <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2 mb-4">
-                <Clock className="w-5 h-5 text-indigo-600" /> Presensi Harian (Hari Ini)
-              </h3>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 border-b border-slate-100 pb-4">
+                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-indigo-600 animate-pulse" /> Presensi PKL Real-Time & GPS Map
+                </h3>
+                
+                {/* LIVE TICKING DIGITAL CLOCK */}
+                <div className="flex items-center gap-2 bg-indigo-50/60 px-3.5 py-1.5 rounded-xl border border-indigo-100/40 text-xs font-bold text-indigo-700">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                  <span>LIVE CLOCK:</span>
+                  <span className="font-mono text-sm tracking-wide">
+                    {liveDateTime.toLocaleTimeString('id-ID', { hour12: false })} WIB
+                  </span>
+                </div>
+              </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
-                <div className="md:col-span-5 bg-slate-50 p-4 rounded-xl border border-slate-100">
-                  <span className="text-xs font-semibold text-slate-500 uppercase">Status Kehadiran Hari Ini</span>
-                  <div className="mt-2 space-y-1.5 text-sm">
-                    <p className="flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full bg-slate-300 inline-block"></span>
-                      Tanggal: <strong className="text-slate-700">{new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</strong>
-                    </p>
-                    <p className="flex items-center gap-2">
-                      <span className={`w-3 h-3 rounded-full inline-block ${todayAttendance ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
-                      Jam Masuk: <strong className="text-slate-700">{todayAttendance?.jam_masuk || '--:--'}</strong>
-                    </p>
-                    <p className="flex items-center gap-2">
-                      <span className={`w-3 h-3 rounded-full inline-block ${todayAttendance?.jam_keluar ? 'bg-indigo-500' : 'bg-slate-300'}`}></span>
-                      Jam Pulang: <strong className="text-slate-700">{todayAttendance?.jam_keluar || '--:--'}</strong>
-                    </p>
-                    {todayAttendance && (
-                      <p className="text-xs text-slate-500 mt-2">
-                        Status Verifikasi Industri:{' '}
-                        <span className={`font-semibold ${
-                          todayAttendance.status_verifikasi === 'disetujui' ? 'text-emerald-600' :
-                          todayAttendance.status_verifikasi === 'ditolak' ? 'text-rose-600' : 'text-amber-600'
-                        }`}>
-                          {todayAttendance.status_verifikasi.toUpperCase()}
-                        </span>
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                {/* LEFT INNER PANEL: LIVE DATE, TIME & DETAILS (UN-EDITABLE) */}
+                <div className="lg:col-span-5 space-y-4">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3.5">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Validasi Waktu Presensi</span>
+                    
+                    <div className="space-y-2 text-xs">
+                      <div>
+                        <label className="text-slate-400 font-semibold block mb-1">Tanggal Hari Ini (Live)</label>
+                        <div className="w-full px-3 py-2.5 rounded-lg border border-slate-200/60 bg-slate-100/80 text-slate-700 font-bold select-none">
+                          {liveDateTime.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-slate-400 font-semibold block mb-1">Jam Live (Tidak Bisa Diedit)</label>
+                        <div className="w-full px-3 py-2.5 rounded-lg border border-slate-200/60 bg-slate-100/80 text-slate-700 font-mono font-bold tracking-wide select-none">
+                          {liveDateTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} WIB
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-200/50 space-y-1.5 text-xs">
+                      <p className="flex items-center justify-between text-slate-500">
+                        <span>Status Hari Ini:</span>
+                        <strong className={`font-semibold ${todayAttendance ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {todayAttendance ? 'Sudah Absen Masuk' : 'Belum Absen'}
+                        </strong>
                       </p>
+                      <p className="flex items-center justify-between text-slate-500">
+                        <span>Jam Masuk Tercatat:</span>
+                        <strong className="text-slate-700">{todayAttendance?.jam_masuk || '--:--'}</strong>
+                      </p>
+                      <p className="flex items-center justify-between text-slate-500">
+                        <span>Jam Pulang Tercatat:</span>
+                        <strong className="text-slate-700">{todayAttendance?.jam_keluar || '--:--'}</strong>
+                      </p>
+                      
+                      {todayAttendance && (
+                        <div className="pt-2 border-t border-slate-200/50 flex justify-between items-center">
+                          <span className="text-slate-400">Verifikasi Industri:</span>
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                            todayAttendance.status_verifikasi === 'disetujui' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                            todayAttendance.status_verifikasi === 'ditolak' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
+                          }`}>
+                            {todayAttendance.status_verifikasi}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* COORD INFORMATION CARD */}
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Deteksi Titik Geolocation GPS</span>
+                      <button 
+                        type="button"
+                        onClick={getCoordinates}
+                        disabled={isLocating}
+                        className="text-[10px] text-indigo-600 font-bold flex items-center gap-1 hover:underline disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isLocating ? 'animate-spin' : ''}`} /> Refresh GPS
+                      </button>
+                    </div>
+
+                    {latitude && longitude ? (
+                      <div className="space-y-2 text-xs">
+                        <div className="bg-emerald-50 text-emerald-800 p-2.5 rounded-lg border border-emerald-100 flex items-center gap-2">
+                          <Compass className="w-4 h-4 text-emerald-600 animate-spin-slow shrink-0" />
+                          <div>
+                            <p className="font-bold">GPS Terkunci Aktif</p>
+                            <p className="text-[10px] text-emerald-700/80">Lokasi Anda aman & terlacak di satelit.</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-[11px] font-mono bg-white p-2 rounded-lg border border-slate-150">
+                          <div>
+                            <span className="text-[9px] text-slate-400 block font-sans">LATITUDE</span>
+                            <span className="font-bold text-slate-700">{latitude.toFixed(6)}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-slate-400 block font-sans">LONGITUDE</span>
+                            <span className="font-bold text-slate-700">{longitude.toFixed(6)}</span>
+                          </div>
+                        </div>
+                        <a 
+                          href={`https://www.google.com/maps?q=${latitude},${longitude}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full py-1.5 px-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-semibold text-slate-600 flex items-center justify-center gap-1 transition-all"
+                        >
+                          <Globe className="w-3.5 h-3.5 text-indigo-600" /> Buka di Google Maps
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {locationError ? (
+                          <div className="bg-rose-50 text-rose-800 p-2.5 rounded-lg border border-rose-100 text-xs">
+                            <p className="font-semibold">GPS Error:</p>
+                            <p className="text-[10px] text-rose-700/90 leading-tight mt-0.5">{locationError}</p>
+                          </div>
+                        ) : (
+                          <div className="bg-amber-50 text-amber-800 p-2.5 rounded-lg border border-amber-100 text-xs flex items-center gap-2">
+                            <RefreshCw className="w-4 h-4 text-amber-600 animate-spin shrink-0" />
+                            <div>
+                              <p className="font-bold">Mendeteksi Lokasi GPS...</p>
+                              <p className="text-[9px] text-amber-700/80">Izinkan akses lokasi di browser.</p>
+                            </div>
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={getCoordinates}
+                          className="w-full py-1.5 bg-indigo-600 text-white rounded-lg text-[11px] font-semibold hover:bg-indigo-700 transition-all flex items-center justify-center gap-1"
+                        >
+                          <MapPin className="w-3.5 h-3.5" /> Dapatkan Titik Lokasi GPS
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
 
-                <div className="md:col-span-7">
-                  {todayAttendance && todayAttendance.jam_keluar ? (
-                    <div className="bg-emerald-50 text-emerald-800 p-4 rounded-xl border border-emerald-100 text-sm flex items-center gap-3">
-                      <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
-                      <div>
-                        <p className="font-semibold">Presensi Selesai!</p>
-                        <p className="text-xs text-emerald-700/90 mt-0.5">Anda telah melakukan absen masuk pada {todayAttendance.jam_masuk} dan pulang pada {todayAttendance.jam_keluar}.</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <form onSubmit={handleAttendance} className="space-y-3">
-                      {!todayAttendance ? (
-                        <>
-                          <div className="flex gap-4">
-                            {['hadir', 'sakit', 'izin'].map((st) => (
-                              <label key={st} className="flex items-center gap-2 text-sm text-slate-700 font-medium capitalize cursor-pointer">
-                                <input
-                                  type="radio"
-                                  name="attStatus"
-                                  checked={attStatus === st}
-                                  onChange={() => setAttStatus(st as any)}
-                                  className="text-indigo-600 focus:ring-indigo-500 h-4 w-4"
-                                />
-                                {st}
-                              </label>
-                            ))}
-                          </div>
-                          {attStatus !== 'hadir' && (
-                            <input
-                              type="text"
-                              required
-                              value={attKeterangan}
-                              onChange={(e) => setAttKeterangan(e.target.value)}
-                              placeholder="Alasan sakit atau izin..."
-                              className="w-full px-3.5 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 bg-white"
-                            />
-                          )}
-                          <button
-                            type="submit"
-                            className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition-all shadow-sm"
-                          >
-                            Absen Masuk (Clock-In)
-                          </button>
-                        </>
-                      ) : (
-                        <div className="space-y-3">
-                          <p className="text-xs text-amber-700 bg-amber-50 p-2.5 rounded-lg border border-amber-100">
-                            Anda sudah absen masuk jam <strong>{todayAttendance.jam_masuk}</strong>. Jangan lupa absen pulang saat waktu PKL berakhir hari ini.
-                          </p>
-                          <button
-                            type="submit"
-                            className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-sm font-semibold transition-all shadow-sm"
-                          >
-                            Absen Pulang (Clock-Out)
-                          </button>
+                {/* RIGHT INNER PANEL: INTERACTIVE GOOGLE MAPS & ATTENDANCE ACTION */}
+                <div className="lg:col-span-7 space-y-4">
+                  {/* GOOGLE MAPS REAL-TIME EMBED PREVIEW */}
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">Visualisasi Peta Presensi</span>
+                    
+                    {latitude && longitude ? (
+                      <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-200">
+                        <iframe 
+                          src={`https://maps.google.com/maps?q=${latitude},${longitude}&z=16&output=embed`} 
+                          className="w-full h-48 sm:h-52" 
+                          allowFullScreen={false} 
+                          loading="lazy"
+                          title="Presensi Geolocation Map"
+                        ></iframe>
+                        <div className="absolute top-2 left-2 bg-slate-900/90 text-white font-mono text-[9px] py-1 px-2 rounded backdrop-blur shadow">
+                          LAT: {latitude.toFixed(5)} | LNG: {longitude.toFixed(5)}
                         </div>
-                      )}
+                      </div>
+                    ) : (
+                      <div className="w-full h-48 sm:h-52 bg-slate-100 border border-slate-200 border-dashed rounded-lg flex flex-col items-center justify-center text-slate-400 p-4 text-center">
+                        <MapPin className="w-8 h-8 text-slate-300 mb-2 animate-bounce" />
+                        <p className="text-xs font-semibold">Peta tidak dapat ditampilkan</p>
+                        <p className="text-[10px] text-slate-400/80 mt-0.5">Silakan aktifkan dan izinkan koordinat GPS Anda untuk melacak posisi presensi secara valid.</p>
+                      </div>
+                    )}
+                  </div>
 
-                      {attSuccess && <p className="text-xs text-emerald-600 font-semibold mt-1">{attSuccess}</p>}
-                    </form>
-                  )}
+                  {/* FORM ACTION FOR IN/OUT CLOCK */}
+                  <div className="p-1 bg-white rounded-xl">
+                    {todayAttendance && todayAttendance.jam_keluar ? (
+                      <div className="bg-emerald-50 text-emerald-800 p-4 rounded-xl border border-emerald-100 text-xs flex items-start gap-3">
+                        <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold text-sm">Presensi Selesai!</p>
+                          <p className="leading-relaxed mt-0.5">Anda sudah menuntaskan kewajiban presensi masuk dan pulang hari ini dengan valid.</p>
+                          <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-emerald-200/50 font-mono text-[10px]">
+                            <div>
+                              <span className="text-emerald-600 font-sans block uppercase font-semibold text-[9px]">JAM MASUK</span>
+                              <span className="font-bold">{todayAttendance.jam_masuk}</span>
+                              {todayAttendance.latitude && (
+                                <span className="block text-[8px] text-emerald-600/80">LAT: {todayAttendance.latitude.toFixed(4)}</span>
+                              )}
+                            </div>
+                            <div>
+                              <span className="text-emerald-600 font-sans block uppercase font-semibold text-[9px]">JAM PULANG</span>
+                              <span className="font-bold">{todayAttendance.jam_keluar}</span>
+                              {todayAttendance.latitude_keluar && (
+                                <span className="block text-[8px] text-emerald-600/80">LAT: {todayAttendance.latitude_keluar.toFixed(4)}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <form onSubmit={handleAttendance} className="space-y-3.5">
+                        {!todayAttendance ? (
+                          <>
+                            <div>
+                              <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Pilih Status Kehadiran</span>
+                              <div className="flex gap-4 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                                {['hadir', 'sakit', 'izin'].map((st) => (
+                                  <label key={st} className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs text-slate-700 font-bold capitalize cursor-pointer border border-transparent hover:bg-white hover:shadow-sm transition-all">
+                                    <input
+                                      type="radio"
+                                      name="attStatus"
+                                      checked={attStatus === st}
+                                      onChange={() => setAttStatus(st as any)}
+                                      className="text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                                    />
+                                    {st}
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+
+                            {attStatus !== 'hadir' && (
+                              <div>
+                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Alasan Sakit / Izin</label>
+                                <input
+                                  type="text"
+                                  required
+                                  value={attKeterangan}
+                                  onChange={(e) => setAttKeterangan(e.target.value)}
+                                  placeholder="Tulis alasan sakit/izin secara jelas..."
+                                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 bg-white"
+                                />
+                              </div>
+                            )}
+
+                            {locationError && (
+                              <div className="p-2.5 bg-amber-50 text-amber-800 rounded-lg border border-amber-200 text-[10px] leading-relaxed">
+                                <strong>Pemberitahuan Geolocation:</strong> Anda akan melakukan presensi tanpa koordinat GPS terdeteksi. Disarankan untuk membagikan lokasi agar presensi Anda valid.
+                              </div>
+                            )}
+
+                            <button
+                              type="submit"
+                              className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 uppercase tracking-wider"
+                            >
+                              <Navigation className="w-4 h-4 shrink-0" /> Kirim Absen Masuk (Clock-In)
+                            </button>
+                          </>
+                        ) : (
+                          <div className="space-y-3">
+                            <div className="bg-amber-50/70 p-4 rounded-xl border border-amber-100/80 text-xs">
+                              <p className="font-bold text-amber-800 flex items-center gap-1"><Info className="w-4 h-4 text-amber-600" /> Presensi Masuk Berhasil!</p>
+                              <p className="text-slate-600 leading-relaxed mt-1">Anda tercatat melakukan absen masuk pada jam <strong>{todayAttendance.jam_masuk}</strong> hari ini. Jangan lupa untuk melakukan absen pulang saat jam kerja berakhir.</p>
+                            </div>
+
+                            <button
+                              type="submit"
+                              className="w-full py-3 rounded-xl bg-slate-900 hover:bg-slate-950 text-white text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 uppercase tracking-wider"
+                            >
+                              <Navigation className="w-4 h-4 shrink-0 rotate-180" /> Kirim Absen Pulang (Clock-Out)
+                            </button>
+                          </div>
+                        )}
+
+                        {attSuccess && (
+                          <div className="p-2.5 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-100 text-center font-bold text-xs animate-pulse">
+                            {attSuccess}
+                          </div>
+                        )}
+                      </form>
+                    )}
+                  </div>
                 </div>
+
               </div>
             </div>
           )}
@@ -696,26 +922,66 @@ export default function StudentDashboard({ student, instansiList, announcements 
             ) : (
               <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
                 {attendanceLogs.map((log) => (
-                  <div key={log.id} className="flex items-center justify-between p-2.5 bg-slate-50/50 rounded-lg border border-slate-100 text-xs">
-                    <div>
-                      <span className="font-semibold text-slate-700 block">{new Date(log.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                      <span className="text-[10px] text-slate-400 font-medium">
-                        {log.status === 'hadir' ? `Jam: ${log.jam_masuk} - ${log.jam_keluar || 'Belum Pulang'}` : `Keterangan: ${log.keterangan || 'Sakit/Izin'}`}
-                      </span>
+                  <div key={log.id} className="p-3 bg-slate-50/50 rounded-xl border border-slate-100 text-xs space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="font-bold text-slate-700 block">
+                          {new Date(log.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-medium block mt-0.5">
+                          {log.status === 'hadir' ? `Jam Masuk: ${log.jam_masuk} | Jam Pulang: ${log.jam_keluar || '--:--'}` : `Keterangan: ${log.keterangan || 'Sakit/Izin'}`}
+                        </span>
+                      </div>
+                      
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                          log.status === 'hadir' ? 'bg-emerald-50 text-emerald-700 border border-emerald-150' : 'bg-amber-50 text-amber-700 border border-amber-150'
+                        }`}>
+                          {log.status}
+                        </span>
+                        <span className={`text-[9px] font-bold uppercase ${
+                          log.status_verifikasi === 'disetujui' ? 'text-emerald-600' :
+                          log.status_verifikasi === 'ditolak' ? 'text-rose-600' : 'text-amber-600'
+                        }`}>
+                          {log.status_verifikasi}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                        log.status === 'hadir' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-amber-50 text-amber-700 border border-amber-100'
-                      }`}>
-                        {log.status}
-                      </span>
-                      <span className={`text-[9px] font-medium ${
-                        log.status_verifikasi === 'disetujui' ? 'text-emerald-600' :
-                        log.status_verifikasi === 'ditolak' ? 'text-rose-600' : 'text-amber-600'
-                      }`}>
-                        {log.status_verifikasi.toUpperCase()}
-                      </span>
-                    </div>
+
+                    {/* Geolocation Coordinate Displays for Student Logs */}
+                    {(log.latitude || log.latitude_keluar) && (
+                      <div className="pt-2 border-t border-slate-200/40 grid grid-cols-2 gap-2 text-[10px] text-slate-500">
+                        {log.latitude && log.longitude ? (
+                          <a 
+                            href={`https://www.google.com/maps?q=${log.latitude},${log.longitude}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-white p-1.5 rounded border border-slate-150 hover:bg-slate-50 transition-colors flex items-center gap-1 text-slate-600 font-medium"
+                            title="Buka Map Koordinat Masuk"
+                          >
+                            <MapPin className="w-3 h-3 text-emerald-500 shrink-0" />
+                            <span className="truncate">GPS Masuk: {log.latitude.toFixed(4)}, {log.longitude.toFixed(4)}</span>
+                          </a>
+                        ) : (
+                          <div className="bg-slate-100/50 p-1.5 rounded text-slate-400 italic">No GPS Masuk</div>
+                        )}
+
+                        {log.latitude_keluar && log.longitude_keluar ? (
+                          <a 
+                            href={`https://www.google.com/maps?q=${log.latitude_keluar},${log.longitude_keluar}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-white p-1.5 rounded border border-slate-150 hover:bg-slate-50 transition-colors flex items-center gap-1 text-slate-600 font-medium"
+                            title="Buka Map Koordinat Pulang"
+                          >
+                            <MapPin className="w-3 h-3 text-indigo-500 shrink-0" />
+                            <span className="truncate">GPS Pulang: {log.latitude_keluar.toFixed(4)}, {log.longitude_keluar.toFixed(4)}</span>
+                          </a>
+                        ) : (
+                          <div className="bg-slate-100/50 p-1.5 rounded text-slate-400 italic">No GPS Pulang</div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

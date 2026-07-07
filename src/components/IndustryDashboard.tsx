@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Briefcase, FileText, CheckCircle2, XCircle, Users, Star, RefreshCw, Send, Bookmark, Info, Check } from 'lucide-react';
+import { Briefcase, FileText, CheckCircle2, XCircle, Users, Star, RefreshCw, Send, Bookmark, Info, Check, MapPin } from 'lucide-react';
 import { PklUser, PklJournal, PklAttendance, PklEvaluation, PklInstansi, MenuAccess } from '../types';
 import { dbGetUsers, dbGetJournals, dbSaveJournal, dbGetAttendance, dbSaveAttendance, dbGetEvaluations, dbSaveEvaluation, dbGetMenuAccess } from '../utils/localDb';
 
@@ -342,48 +342,87 @@ export default function IndustryDashboard({ industry, instansiList }: IndustryDa
                     {activeStudentAttendance.length === 0 ? (
                       <p className="text-xs text-slate-400 italic py-6 text-center">Siswa belum memiliki log absensi.</p>
                     ) : (
-                      <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
+                      <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
                         {activeStudentAttendance.map((log) => (
-                          <div key={log.id} className="flex items-center justify-between p-3 bg-slate-50/50 rounded-xl border border-slate-100 text-xs">
-                            <div>
-                              <strong className="text-slate-700">{new Date(log.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>
-                              <p className="text-[10px] text-slate-400 mt-0.5">
-                                {log.status === 'hadir' ? `Jam Masuk: ${log.jam_masuk} | Jam Pulang: ${log.jam_keluar || 'Belum Pulang'}` : `Keterangan: ${log.keterangan || '-'}`}
-                              </p>
-                            </div>
+                          <div key={log.id} className="p-4 bg-slate-50/50 rounded-xl border border-slate-100 text-xs space-y-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <strong className="text-slate-700 block">
+                                  {new Date(log.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                </strong>
+                                <p className="text-[10px] text-slate-400 mt-0.5 font-medium">
+                                  {log.status === 'hadir' ? `Jam Masuk: ${log.jam_masuk} | Jam Pulang: ${log.jam_keluar || 'Belum Pulang'}` : `Keterangan: ${log.keterangan || '-'}`}
+                                </p>
+                              </div>
 
-                            <div className="flex items-center gap-3">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                log.status === 'hadir' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-amber-50 text-amber-700 border border-amber-100'
-                              }`}>
-                                {log.status}
-                              </span>
-
-                              {log.status_verifikasi === 'pending' ? (
-                                <div className="flex gap-1">
-                                  <button
-                                    onClick={() => handleVerifyAttendance(log, 'ditolak')}
-                                    className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-100"
-                                    title="Tolak Presensi"
-                                  >
-                                    <XCircle className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleVerifyAttendance(log, 'disetujui')}
-                                    className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-100"
-                                    title="Setujui Presensi"
-                                  >
-                                    <CheckCircle2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              ) : (
-                                <span className={`text-[10px] font-semibold ${
-                                  log.status_verifikasi === 'disetujui' ? 'text-emerald-600' : 'text-rose-600'
+                              <div className="flex items-center gap-2.5">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                  log.status === 'hadir' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-amber-50 text-amber-700 border border-amber-100'
                                 }`}>
-                                  {log.status_verifikasi.toUpperCase()}
+                                  {log.status}
                                 </span>
-                              )}
+
+                                {log.status_verifikasi === 'pending' ? (
+                                  <div className="flex gap-1">
+                                    <button
+                                      onClick={() => handleVerifyAttendance(log, 'ditolak')}
+                                      className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-100"
+                                      title="Tolak Presensi"
+                                    >
+                                      <XCircle className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleVerifyAttendance(log, 'disetujui')}
+                                      className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-100"
+                                      title="Setujui Presensi"
+                                    >
+                                      <CheckCircle2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className={`text-[10px] font-bold uppercase ${
+                                    log.status_verifikasi === 'disetujui' ? 'text-emerald-600' : 'text-rose-600'
+                                  }`}>
+                                    {log.status_verifikasi}
+                                  </span>
+                                )}
+                              </div>
                             </div>
+
+                            {/* GPS Mapping Coordinates Display for Industry Representative */}
+                            {(log.latitude || log.latitude_keluar) && (
+                              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/50 text-[10px]">
+                                {log.latitude && log.longitude ? (
+                                  <a
+                                    href={`https://www.google.com/maps?q=${log.latitude},${log.longitude}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="bg-white p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-all flex items-center gap-1.5 text-slate-600 font-semibold"
+                                    title="Lihat Peta Koordinat Masuk"
+                                  >
+                                    <MapPin className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                                    <span className="truncate font-mono text-[9px]">GPS Masuk: {log.latitude.toFixed(5)}, {log.longitude.toFixed(5)}</span>
+                                  </a>
+                                ) : (
+                                  <div className="bg-slate-100/50 p-2 rounded-lg text-slate-400 italic">No GPS Masuk</div>
+                                )}
+
+                                {log.latitude_keluar && log.longitude_keluar ? (
+                                  <a
+                                    href={`https://www.google.com/maps?q=${log.latitude_keluar},${log.longitude_keluar}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="bg-white p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-all flex items-center gap-1.5 text-slate-600 font-semibold"
+                                    title="Lihat Peta Koordinat Pulang"
+                                  >
+                                    <MapPin className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                                    <span className="truncate font-mono text-[9px]">GPS Pulang: {log.latitude_keluar.toFixed(5)}, {log.longitude_keluar.toFixed(5)}</span>
+                                  </a>
+                                ) : (
+                                  <div className="bg-slate-100/50 p-2 rounded-lg text-slate-400 italic">No GPS Pulang</div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>

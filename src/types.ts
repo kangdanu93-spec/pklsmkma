@@ -57,6 +57,10 @@ export interface PklAttendance {
   status: 'hadir' | 'sakit' | 'izin' | 'alfa';
   keterangan?: string;
   status_verifikasi: 'pending' | 'disetujui' | 'ditolak';
+  latitude?: number;
+  longitude?: number;
+  latitude_keluar?: number;
+  longitude_keluar?: number;
   created_at?: string;
 }
 

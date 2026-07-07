@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   Building2, Users, FileCheck, Calendar, Star, RefreshCw, Plus, Trash2, 
   UserPlus, Check, X, ClipboardList, ShieldAlert, Download, Phone, MapPin,
-  FileSpreadsheet, UploadCloud
+  FileSpreadsheet, UploadCloud, Shield, BookOpen, GraduationCap, UserCheck,
+  Settings
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { PklUser, PklInstansi, PklPlacement, PklEvaluation, Announcement, UserRole, PklClass, MenuAccess } from '../types';
@@ -47,8 +48,8 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
   const [classesList, setClassesList] = useState<PklClass[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Active sub-tab state ('placements' | 'students' | 'users' | 'companies' | 'reports' | 'classes' | 'permissions')
-  const [activeTab, setActiveTab] = useState<'placements' | 'students' | 'users' | 'companies' | 'reports' | 'classes' | 'permissions'>('placements');
+  // Active sub-tab state ('placements' | 'students' | 'teachers' | 'users' | 'companies' | 'reports' | 'classes' | 'permissions')
+  const [activeTab, setActiveTab] = useState<'placements' | 'students' | 'teachers' | 'users' | 'companies' | 'reports' | 'classes' | 'permissions'>('placements');
 
   // Dynamic dropdown options calculated from master classes state, with static fallbacks
   const KELAS_OPTIONS = classesList.length > 0
@@ -106,10 +107,14 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
   // Edit states / Selection states
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [editingStudentMasterId, setEditingStudentMasterId] = useState<string | null>(null);
+  const [editingTeacherMasterId, setEditingTeacherMasterId] = useState<string | null>(null);
   const [tempPembimbingId, setTempPembimbingId] = useState('');
   const [studentSearch, setStudentSearch] = useState('');
+  const [teacherSearch, setTeacherSearch] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isDragOverTeacher, setIsDragOverTeacher] = useState(false);
   const [importStatus, setImportStatus] = useState<{ success?: string; error?: string } | null>(null);
+  const [teacherImportStatus, setTeacherImportStatus] = useState<{ success?: string; error?: string } | null>(null);
 
   // Menu permissions
   const [menuAccessList, setMenuAccessList] = useState<MenuAccess[]>([]);
@@ -354,6 +359,156 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
     if (file) {
       setImportStatus(null);
       processExcelFile(file);
+    }
+  };
+
+  // ---------------- GURU PEMBIMBING EXCEL IMPORT ----------------
+  const handleDownloadTeacherTemplate = () => {
+    try {
+      const templateData = [
+        {
+          'NIP/NIK': '19750821001',
+          'Nama Lengkap': 'Drs. Ahmad Junaidi',
+          'Telepon': '081234567890',
+          'Password': 'password123'
+        },
+        {
+          'NIP/NIK': '19820412002',
+          'Nama Lengkap': 'Dewi Lestari M.Pd',
+          'Telepon': '081299887766',
+          'Password': 'password123'
+        }
+      ];
+
+      const worksheet = XLSX.utils.json_to_sheet(templateData);
+      
+      const colWidths = [
+        { wch: 20 }, // NIP/NIK
+        { wch: 30 }, // Nama Lengkap
+        { wch: 18 }, // Telepon
+        { wch: 15 }  // Password
+      ];
+      worksheet['!cols'] = colWidths;
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Guru Pembimbing');
+      
+      XLSX.writeFile(workbook, 'Template_Upload_Guru_Pembimbing_PKL.xlsx');
+    } catch (err) {
+      console.error('Gagal mengunduh template:', err);
+      alert('Gagal mengunduh template Excel!');
+    }
+  };
+
+  const processTeacherExcelFile = async (file: File) => {
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const binaryString = evt.target?.result;
+        if (!binaryString) return;
+
+        const workbook = XLSX.read(binaryString, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json<any>(worksheet);
+
+        if (json.length === 0) {
+          setTeacherImportStatus({ error: 'File Excel kosong atau tidak terbaca.' });
+          return;
+        }
+
+        // Check required columns
+        const sampleRow = json[0];
+        const requiredFields = ['NIP/NIK', 'Nama Lengkap', 'Telepon'];
+        const missingFields = requiredFields.filter(f => !(f in sampleRow));
+        if (missingFields.length > 0) {
+          setTeacherImportStatus({ 
+            error: `Format kolom salah! Kolom berikut wajib ada: ${missingFields.join(', ')}` 
+          });
+          return;
+        }
+
+        let successCount = 0;
+        let errorCount = 0;
+
+        for (const row of json) {
+          const nama = String(row['Nama Lengkap'] || '').trim();
+          const nip = String(row['NIP/NIK'] || '').trim();
+          const telepon = String(row['Telepon'] || '').trim();
+          const password = String(row['Password'] || 'password123').trim();
+          const email = `${nip}@guru.simpkl.com`;
+
+          if (!nip || !nama) {
+            errorCount++;
+            continue;
+          }
+
+          const teacherUser: PklUser = {
+            id: email, // Email used as unique key
+            email: email,
+            password: password,
+            nama: nama,
+            role: 'guru',
+            nomor_induk: nip,
+            telepon: telepon || '-'
+          };
+
+          const res = await dbSaveUser(teacherUser);
+          if (res.success) {
+            successCount++;
+          } else {
+            errorCount++;
+          }
+        }
+
+        setTeacherImportStatus({ 
+          success: `Berhasil mengimpor ${successCount} data guru pembimbing! (Gagal/Lewati: ${errorCount} baris)` 
+        });
+        fetchAdminData();
+        onRefreshGlobalData();
+      } catch (err) {
+        console.error('Error processing excel:', err);
+        setTeacherImportStatus({ error: 'Gagal menguraikan file Excel. Pastikan format file sesuai.' });
+      }
+    };
+
+    reader.onerror = () => {
+      setTeacherImportStatus({ error: 'Gagal membaca file.' });
+    };
+
+    reader.readAsBinaryString(file);
+  };
+
+  const handleUploadTeacherExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setTeacherImportStatus(null);
+      processTeacherExcelFile(file);
+    }
+  };
+
+  const handleUpdateTeacherMaster = async (userId: string) => {
+    const existing = users.find(u => u.id === userId);
+    if (!existing) return;
+
+    if (!editNama.trim() || !editNomorInduk.trim() || !editTelepon.trim()) {
+      alert('Nama, NIP/NIK (nomor induk), dan telepon tidak boleh kosong!');
+      return;
+    }
+
+    const updatedUser: PklUser = {
+      ...existing,
+      nama: editNama.trim(),
+      nomor_induk: editNomorInduk.trim(),
+      telepon: editTelepon.trim(),
+      password: editPassword.trim() || 'password123',
+    };
+
+    const res = await dbSaveUser(updatedUser);
+    if (res.success) {
+      setEditingTeacherMasterId(null);
+      fetchAdminData();
+      onRefreshGlobalData();
     }
   };
 
@@ -654,6 +809,12 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
   };
 
   const teachers = users.filter(u => u.role === 'guru');
+  const filteredTeachers = teachers.filter(t => {
+    const query = teacherSearch.toLowerCase();
+    return t.nama.toLowerCase().includes(query) ||
+           t.nomor_induk.toLowerCase().includes(query) ||
+           (t.telepon && t.telepon.toLowerCase().includes(query));
+  });
   const allStudents = users.filter(u => u.role === 'siswa');
   const filteredStudents = allStudents.filter(s => {
     const query = studentSearch.toLowerCase();
@@ -724,82 +885,130 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
         </div>
       </div>
 
-      {/* NAVIGATION TABS */}
-      <div className="flex border-b border-slate-200 gap-2 overflow-x-auto pb-px">
-        {isTabAllowed('admin_plotting') && (
-          <button
-            onClick={() => setActiveTab('placements')}
-            className={`px-5 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
-              activeTab === 'placements' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Plotting & Pengajuan PKL
-          </button>
-        )}
-        {isTabAllowed('admin_siswa') && (
-          <button
-            onClick={() => { setActiveTab('students'); setUserRole('siswa'); }}
-            className={`px-5 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
-              activeTab === 'students' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Master Data Siswa
-          </button>
-        )}
-        {isTabAllowed('admin_pengguna') && (
-          <button
-            onClick={() => { setActiveTab('users'); setUserRole('siswa'); }}
-            className={`px-5 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
-              activeTab === 'users' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Kelola Pengguna
-          </button>
-        )}
-        {isTabAllowed('admin_instansi') && (
-          <button
-            onClick={() => setActiveTab('companies')}
-            className={`px-5 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
-              activeTab === 'companies' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Kelola Instansi
-          </button>
-        )}
-        {isTabAllowed('admin_kelas') && (
-          <button
-            onClick={() => setActiveTab('classes')}
-            className={`px-5 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
-              activeTab === 'classes' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Master Kelas
-          </button>
-        )}
-        {isTabAllowed('admin_rekap') && (
-          <button
-            onClick={() => setActiveTab('reports')}
-            className={`px-5 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
-              activeTab === 'reports' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Laporan Rekap Nilai
-          </button>
-        )}
-        <button
-          onClick={() => setActiveTab('permissions')}
-          className={`px-5 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
-            activeTab === 'permissions' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          Hak Akses Menu
-        </button>
-      </div>
-
+      {/* MAIN CONTAINER GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
-        {/* LEFT/MAIN MODULE COLUMN (based on activeTab) */}
-        <div className="lg:col-span-8 space-y-8">
+        {/* SIDEBAR NAVIGATION - VERTICAL STACKED (BERTINGKAT) */}
+        <div className="lg:col-span-3">
+          <div className="bg-slate-50/80 border border-slate-200/60 rounded-2xl p-4 space-y-1.5 lg:sticky lg:top-6">
+            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block px-3 mb-2">Menu Kontrol Admin</span>
+            
+            <div className="flex flex-col gap-1">
+              {isTabAllowed('admin_plotting') && (
+                <button
+                  onClick={() => setActiveTab('placements')}
+                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold rounded-xl transition-all ${
+                    activeTab === 'placements' 
+                      ? 'bg-indigo-600 text-white shadow-sm font-bold' 
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
+                  }`}
+                >
+                  <ClipboardList className={`w-4 h-4 shrink-0 ${activeTab === 'placements' ? 'text-white' : 'text-slate-400'}`} />
+                  <span className="truncate">Plotting & Pengajuan PKL</span>
+                </button>
+              )}
+              {isTabAllowed('admin_siswa') && (
+                <button
+                  onClick={() => { setActiveTab('students'); setUserRole('siswa'); }}
+                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold rounded-xl transition-all ${
+                    activeTab === 'students' 
+                      ? 'bg-indigo-600 text-white shadow-sm font-bold' 
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
+                  }`}
+                >
+                  <GraduationCap className={`w-4 h-4 shrink-0 ${activeTab === 'students' ? 'text-white' : 'text-slate-400'}`} />
+                  <span className="truncate">Master Data Siswa</span>
+                </button>
+              )}
+              {isTabAllowed('admin_guru') && (
+                <button
+                  onClick={() => { setActiveTab('teachers'); setUserRole('guru'); }}
+                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold rounded-xl transition-all ${
+                    activeTab === 'teachers' 
+                      ? 'bg-indigo-600 text-white shadow-sm font-bold' 
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
+                  }`}
+                >
+                  <UserCheck className={`w-4 h-4 shrink-0 ${activeTab === 'teachers' ? 'text-white' : 'text-slate-400'}`} />
+                  <span className="truncate">Master Guru Pembimbing</span>
+                </button>
+              )}
+              {isTabAllowed('admin_pengguna') && (
+                <button
+                  onClick={() => { setActiveTab('users'); setUserRole('siswa'); }}
+                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold rounded-xl transition-all ${
+                    activeTab === 'users' 
+                      ? 'bg-indigo-600 text-white shadow-sm font-bold' 
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
+                  }`}
+                >
+                  <Settings className={`w-4 h-4 shrink-0 ${activeTab === 'users' ? 'text-white' : 'text-slate-400'}`} />
+                  <span className="truncate">Kelola Pengguna</span>
+                </button>
+              )}
+              {isTabAllowed('admin_instansi') && (
+                <button
+                  onClick={() => setActiveTab('companies')}
+                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold rounded-xl transition-all ${
+                    activeTab === 'companies' 
+                      ? 'bg-indigo-600 text-white shadow-sm font-bold' 
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
+                  }`}
+                >
+                  <Building2 className={`w-4 h-4 shrink-0 ${activeTab === 'companies' ? 'text-white' : 'text-slate-400'}`} />
+                  <span className="truncate">Kelola Instansi</span>
+                </button>
+              )}
+              {isTabAllowed('admin_kelas') && (
+                <button
+                  onClick={() => setActiveTab('classes')}
+                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold rounded-xl transition-all ${
+                    activeTab === 'classes' 
+                      ? 'bg-indigo-600 text-white shadow-sm font-bold' 
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
+                  }`}
+                >
+                  <BookOpen className={`w-4 h-4 shrink-0 ${activeTab === 'classes' ? 'text-white' : 'text-slate-400'}`} />
+                  <span className="truncate">Master Kelas</span>
+                </button>
+              )}
+              {isTabAllowed('admin_rekap') && (
+                <button
+                  onClick={() => setActiveTab('reports')}
+                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold rounded-xl transition-all ${
+                    activeTab === 'reports' 
+                      ? 'bg-indigo-600 text-white shadow-sm font-bold' 
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
+                  }`}
+                >
+                  <FileCheck className={`w-4 h-4 shrink-0 ${activeTab === 'reports' ? 'text-white' : 'text-slate-400'}`} />
+                  <span className="truncate">Laporan Rekap Nilai</span>
+                </button>
+              )}
+              
+              <div className="h-px bg-slate-200 my-1.5" />
+              
+              <button
+                onClick={() => setActiveTab('permissions')}
+                className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold rounded-xl transition-all ${
+                  activeTab === 'permissions' 
+                    ? 'bg-indigo-600 text-white shadow-sm font-bold' 
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
+                }`}
+              >
+                <Shield className={`w-4 h-4 shrink-0 ${activeTab === 'permissions' ? 'text-white' : 'text-slate-400'}`} />
+                <span className="truncate">Hak Akses Menu</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* MAIN PANEL CONTENT & ACTION FORMS */}
+        <div className="lg:col-span-9 space-y-8">
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+            
+            {/* LEFT/MAIN MODULE COLUMN (based on activeTab) */}
+            <div className="xl:col-span-8 space-y-8">
           
           {/* TAB 1: PLACEMENTS & PLOTTING */}
           {activeTab === 'placements' && (
@@ -1219,6 +1428,255 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                                         onClick={() => handleDeleteUser(stud.id)}
                                         className="text-rose-600 hover:text-rose-800 p-1.5 rounded-lg hover:bg-rose-50 border border-transparent transition-all inline-flex"
                                         title="Hapus Siswa"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </>
+                              )}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB: GURU PEMBIMBING MANAGEMENT */}
+          {activeTab === 'teachers' && (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6" id="admin-teachers-mgmt">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
+                <div>
+                  <h3 className="text-base font-bold text-slate-800 font-sans tracking-tight">Master Data Guru Pembimbing</h3>
+                  <p className="text-xs text-slate-400">Kelola guru pembimbing PKL, download template excel, dan unggah data guru secara massal.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={handleDownloadTeacherTemplate}
+                    className="px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl border border-slate-200/60 font-semibold text-xs flex items-center gap-1.5 transition-all shadow-sm"
+                  >
+                    <Download className="w-4 h-4 text-slate-500" />
+                    Unduh Template Excel
+                  </button>
+                  <label className="cursor-pointer px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold text-xs flex items-center gap-1.5 transition-all shadow-sm">
+                    <UploadCloud className="w-4 h-4" />
+                    Unggah Excel
+                    <input
+                      type="file"
+                      accept=".xlsx, .xls"
+                      onChange={handleUploadTeacherExcel}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* SEARCH & FILTER */}
+              <div className="flex gap-2 mb-6">
+                <input
+                  type="text"
+                  placeholder="Cari guru berdasarkan Nama, NIP/NIK, atau No Telepon..."
+                  value={teacherSearch}
+                  onChange={(e) => setTeacherSearch(e.target.value)}
+                  className="flex-1 px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50/50 text-slate-800 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none placeholder-slate-400 font-medium transition-all"
+                />
+                {teacherSearch && (
+                  <button
+                    onClick={() => setTeacherSearch('')}
+                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-semibold text-xs transition-all"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {/* IMPORT STATUS MESSAGE */}
+              {teacherImportStatus && (
+                <div className={`p-4 rounded-xl text-xs font-semibold mb-6 flex items-start gap-2.5 ${
+                  teacherImportStatus.success ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-rose-50 text-rose-700 border border-rose-100'
+                }`}>
+                  <div className="flex-1">
+                    {teacherImportStatus.success || teacherImportStatus.error}
+                  </div>
+                  <button onClick={() => setTeacherImportStatus(null)} className="text-slate-400 hover:text-slate-600">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* DRAG AND DROP AREA */}
+              <div
+                onDragOver={(e) => { e.preventDefault(); setIsDragOverTeacher(true); }}
+                onDragLeave={() => setIsDragOverTeacher(false)}
+                onDrop={async (e) => {
+                  e.preventDefault();
+                  setIsDragOverTeacher(false);
+                  const file = e.dataTransfer.files?.[0];
+                  if (file) {
+                    setTeacherImportStatus(null);
+                    await processTeacherExcelFile(file);
+                  }
+                }}
+                className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all mb-6 ${
+                  isDragOverTeacher 
+                    ? 'border-indigo-500 bg-indigo-50/30' 
+                    : 'border-slate-200 bg-slate-50/20 hover:bg-slate-50/50'
+                }`}
+              >
+                <div className="flex flex-col items-center gap-2">
+                  <FileSpreadsheet className="w-8 h-8 text-indigo-500" />
+                  <p className="text-xs font-semibold text-slate-700">Tarik & Lepas File Excel Guru di sini</p>
+                  <p className="text-[10px] text-slate-400">Mendukung format .xlsx atau .xls dengan struktur NIP/NIK, Nama Lengkap, Telepon</p>
+                </div>
+              </div>
+
+              {/* STATISTICS GRID */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                <div className="bg-slate-50/60 p-4 rounded-xl border border-slate-100 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-500">Total Guru Pembimbing</span>
+                  <span className="text-base font-bold text-slate-800">{teachers.length} Guru</span>
+                </div>
+                <div className="bg-slate-50/60 p-4 rounded-xl border border-slate-100 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-500">Guru Terfilter</span>
+                  <span className="text-base font-bold text-indigo-600">{filteredTeachers.length} Guru</span>
+                </div>
+              </div>
+
+              {/* TEACHERS LIST TABLE */}
+              <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
+                {filteredTeachers.length === 0 ? (
+                  <div className="py-12 text-center text-slate-400 text-xs">
+                    Tidak ada data guru pembimbing yang ditemukan.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider bg-slate-50/30">
+                          <th className="py-3 px-4 text-center w-12">No</th>
+                          <th className="py-3 px-4 w-40">NIP / NIK</th>
+                          <th className="py-3 px-4">Nama & Informasi Akun</th>
+                          <th className="py-3 px-4 w-40 text-center">Bimbingan Siswa</th>
+                          <th className="py-3 px-4 text-right w-36">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-600">
+                        {filteredTeachers.map((teacher, idx) => {
+                          const isEditing = editingTeacherMasterId === teacher.id;
+                          const bimbinganCount = allStudents.filter(s => s.id_pembimbing === teacher.id).length;
+                          return (
+                            <tr key={teacher.id} className={`hover:bg-slate-50/30 transition-colors ${isEditing ? 'bg-indigo-50/30' : ''}`}>
+                              {isEditing ? (
+                                <>
+                                  <td className="py-3 px-4 text-center font-medium text-slate-400">
+                                    {idx + 1}
+                                  </td>
+                                  <td className="py-3 px-4">
+                                    <input
+                                      type="text"
+                                      value={editNomorInduk}
+                                      onChange={(e) => setEditNomorInduk(e.target.value)}
+                                      className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-medium font-mono"
+                                      placeholder="NIP/NIK"
+                                    />
+                                  </td>
+                                  <td className="py-3 px-4 space-y-1">
+                                    <input
+                                      type="text"
+                                      value={editNama}
+                                      onChange={(e) => setEditNama(e.target.value)}
+                                      className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-semibold"
+                                      placeholder="Nama Lengkap"
+                                    />
+                                    <div className="flex gap-1">
+                                      <input
+                                        type="text"
+                                        value={editTelepon}
+                                        onChange={(e) => setEditTelepon(e.target.value)}
+                                        className="w-1/2 px-2 py-0.5 rounded border border-slate-200 bg-white text-[10px] text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                                        placeholder="Telepon"
+                                      />
+                                      <input
+                                        type="text"
+                                        value={editPassword}
+                                        onChange={(e) => setEditPassword(e.target.value)}
+                                        className="w-1/2 px-2 py-0.5 rounded border border-slate-200 bg-white text-[10px] text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono"
+                                        placeholder="Sandi login"
+                                      />
+                                    </div>
+                                    <span className="text-[9px] text-slate-400 block px-1">{teacher.email}</span>
+                                  </td>
+                                  <td className="py-3 px-4 text-center">
+                                    <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600 font-bold text-[10px]">
+                                      {bimbinganCount} Siswa
+                                    </span>
+                                  </td>
+                                  <td className="py-3 px-4 text-right">
+                                    <div className="flex gap-1 justify-end">
+                                      <button
+                                        onClick={() => setEditingTeacherMasterId(null)}
+                                        className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold"
+                                      >
+                                        Batal
+                                      </button>
+                                      <button
+                                        onClick={() => handleUpdateTeacherMaster(teacher.id)}
+                                        className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-0.5"
+                                      >
+                                        <Check className="w-3.5 h-3.5" /> Simpan
+                                      </button>
+                                    </div>
+                                  </td>
+                                </>
+                              ) : (
+                                <>
+                                  <td className="py-3.5 px-4 text-center font-medium text-slate-400">
+                                    {idx + 1}
+                                  </td>
+                                  <td className="py-3.5 px-4 font-mono font-medium text-slate-700">
+                                    {teacher.nomor_induk}
+                                  </td>
+                                  <td className="py-3.5 px-4">
+                                    <span className="font-bold text-slate-800 block">{teacher.nama}</span>
+                                    <div className="flex flex-wrap gap-x-2 gap-y-0.5 items-center mt-0.5">
+                                      <span className="text-[10px] text-slate-400">{teacher.email}</span>
+                                      {teacher.telepon && (
+                                        <span className="text-[10px] text-slate-400">• Telp: {teacher.telepon}</span>
+                                      )}
+                                      <span className="text-[10px] text-slate-400">• Pass: {teacher.password || 'password123'}</span>
+                                    </div>
+                                  </td>
+                                  <td className="py-3.5 px-4 text-center font-semibold text-slate-800">
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                      bimbinganCount > 0 
+                                        ? 'bg-indigo-50 text-indigo-600' 
+                                        : 'bg-amber-50 text-amber-600'
+                                    }`}>
+                                      {bimbinganCount} Siswa
+                                    </span>
+                                  </td>
+                                  <td className="py-3.5 px-4 text-right">
+                                    <div className="flex items-center justify-end gap-1.5">
+                                      <button
+                                        onClick={() => {
+                                          setEditingTeacherMasterId(teacher.id);
+                                          setEditNama(teacher.nama);
+                                          setEditNomorInduk(teacher.nomor_induk);
+                                          setEditTelepon(teacher.telepon || '');
+                                          setEditPassword(teacher.password || 'password123');
+                                        }}
+                                        className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold hover:underline px-2 py-1 hover:bg-indigo-50/50 rounded-md transition-all"
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteUser(teacher.id)}
+                                        className="text-rose-600 hover:text-rose-800 p-1.5 rounded-lg hover:bg-rose-50 border border-transparent transition-all inline-flex"
+                                        title="Hapus Guru"
                                       >
                                         <Trash2 className="w-4 h-4" />
                                       </button>
@@ -1691,10 +2149,10 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
             </div>
           )}
 
-        </div>
+            </div>
 
-        {/* RIGHT COLUMN: ACTION FORMS (USER ADD, INSTANSI ADD, ANNOUNCEMENTS) */}
-        <div className="lg:col-span-4 space-y-8">
+            {/* RIGHT COLUMN: ACTION FORMS (USER ADD, INSTANSI ADD, ANNOUNCEMENTS) */}
+            <div className="xl:col-span-4 space-y-8">
           
           {/* PERMISSIONS INFO PANEL */}
           {activeTab === 'permissions' && (
@@ -1718,10 +2176,10 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
           )}
           
           {/* USER ADD FORM */}
-          {(activeTab === 'users' || activeTab === 'students') && (
+          {(activeTab === 'users' || activeTab === 'students' || activeTab === 'teachers') && (
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4">
               <h4 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
-                <UserPlus className="w-4 h-4 text-indigo-600" /> {activeTab === 'students' ? 'Tambah Siswa Baru' : 'Tambah Pengguna Baru'}
+                <UserPlus className="w-4 h-4 text-indigo-600" /> {activeTab === 'students' ? 'Tambah Siswa Baru' : activeTab === 'teachers' ? 'Tambah Guru Pembimbing Baru' : 'Tambah Pengguna Baru'}
               </h4>
 
               <form onSubmit={handleAddUser} className="space-y-3.5 text-xs">
@@ -1769,7 +2227,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                     <input
                       type="text"
                       readOnly
-                      value="Siswa (Magang)"
+                      value={activeTab === 'teachers' ? 'Guru Pembimbing' : 'Siswa (Magang)'}
                       className="w-full px-3 py-2 rounded-lg border border-slate-100 bg-slate-50 text-slate-500 font-semibold focus:outline-none cursor-not-allowed"
                     />
                   </div>
@@ -1782,7 +2240,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                     required
                     value={userNomorInduk}
                     onChange={(e) => setUserNomorInduk(e.target.value)}
-                    placeholder="NISN006234 or NIP19820..."
+                    placeholder={activeTab === 'teachers' ? 'NIP/NIK' : 'NISN006234 or NIP19820...'}
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none bg-white text-slate-800"
                   />
                 </div>
@@ -1865,7 +2323,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                   type="submit"
                   className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-all"
                 >
-                  {activeTab === 'students' ? 'Tambahkan Siswa' : 'Tambahkan Pengguna'}
+                  {activeTab === 'students' ? 'Tambahkan Siswa' : activeTab === 'teachers' ? 'Tambahkan Guru Pembimbing' : 'Tambahkan Pengguna'}
                 </button>
 
                 {userSuccess && <p className="text-[10px] text-emerald-600 font-semibold">{userSuccess}</p>}
@@ -2079,6 +2537,9 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
             )}
           </div>
 
+            </div>
+
+          </div>
         </div>
 
       </div>
