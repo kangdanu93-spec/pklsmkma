@@ -34,6 +34,36 @@ export function saveSupabaseConfig(url: string, anonKey: string) {
     localStorage.setItem('SIM_PKL_SUPABASE_URL', url.trim());
     localStorage.setItem('SIM_PKL_SUPABASE_ANON_KEY', anonKey.trim());
   }
+
+  // Persist to the full-stack server so other browsers can sync automatically on load
+  fetch('/api/save-supabase-config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: url.trim(), anonKey: anonKey.trim() })
+  }).catch(err => console.error('Failed to save Supabase config to server:', err));
+}
+
+export async function syncSupabaseConfigFromServer(): Promise<boolean> {
+  try {
+    const res = await fetch('/api/supabase-config');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.url && data.anonKey) {
+        const localUrl = localStorage.getItem('SIM_PKL_SUPABASE_URL');
+        const localKey = localStorage.getItem('SIM_PKL_SUPABASE_ANON_KEY');
+        
+        if (localUrl !== data.url || localKey !== data.anonKey) {
+          localStorage.setItem('SIM_PKL_SUPABASE_URL', data.url.trim());
+          localStorage.setItem('SIM_PKL_SUPABASE_ANON_KEY', data.anonKey.trim());
+          supabaseInstance = null; // Reset instance to force re-creation
+          return true; // Config was updated
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Failed to sync Supabase config from server:', err);
+  }
+  return false;
 }
 
 let supabaseInstance: SupabaseClient | null = null;

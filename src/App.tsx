@@ -12,7 +12,7 @@ import {
   dbGetUsers, dbGetInstansi, dbGetPlacements, dbGetJournals, 
   dbGetAttendance, dbGetEvaluations, dbGetAnnouncements, dbGetMenuAccess, isSuperAdmin
 } from './utils/localDb';
-import { isSupabaseConnected, getSupabaseConfig, getSupabaseClient } from './supabaseClient';
+import { isSupabaseConnected, getSupabaseConfig, getSupabaseClient, syncSupabaseConfigFromServer } from './supabaseClient';
 
 // Dashboards & Login
 import { Login } from './components/Login';
@@ -50,6 +50,9 @@ export default function App() {
   const loadGlobalData = async () => {
     setGlobalLoading(true);
     try {
+      // Sync Supabase credentials from full-stack server
+      await syncSupabaseConfigFromServer();
+
       // Load menu permissions
       const menuPerms = dbGetMenuAccess();
       setMenuAccessList(menuPerms);
