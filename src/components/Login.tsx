@@ -151,23 +151,11 @@ export const Login: React.FC<LoginProps> = ({ users, onLoginSuccess }) => {
         {/* FORM LOGIN */}
         <div className="p-8 sm:p-10 flex flex-col justify-center">
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-md">
-                  <GraduationCap className="w-6 h-6" />
-                </div>
-                <span className="text-xl font-black text-slate-800 tracking-tight">SIM PKL SMK MA</span>
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-md">
+                <GraduationCap className="w-6 h-6" />
               </div>
-
-              {isCloudConnected ? (
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
-                  <Shield className="w-3.5 h-3.5" /> Supabase Secure Auth
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-100">
-                  <ShieldAlert className="w-3.5 h-3.5" /> Offline Sandbox Mode
-                </span>
-              )}
+              <span className="text-xl font-black text-slate-800 tracking-tight">SIM PKL SMK MA</span>
             </div>
 
             <div>

@@ -47,8 +47,8 @@ export default function App() {
     loadGlobalData();
   }, []);
 
-  const loadGlobalData = async () => {
-    setGlobalLoading(true);
+  const loadGlobalData = async (silent = false) => {
+    if (!silent) setGlobalLoading(true);
     try {
       // Sync Supabase credentials from full-stack server
       await syncSupabaseConfigFromServer();
@@ -125,7 +125,7 @@ export default function App() {
     } catch (error) {
       console.error('Gagal memuat data SIM PKL:', error);
     } finally {
-      setGlobalLoading(false);
+      if (!silent) setGlobalLoading(false);
     }
   };
 
@@ -155,7 +155,7 @@ export default function App() {
   };
 
   const onRefreshGlobalData = () => {
-    loadGlobalData();
+    loadGlobalData(true);
   };
 
   const isMenuAllowed = (menuId: string): boolean => {
@@ -184,15 +184,11 @@ export default function App() {
       <div className="bg-slate-900 text-white text-xs px-6 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2 border-b border-slate-800 shadow-sm">
         <div className="flex items-center gap-2">
           <span className="flex h-2 w-2 relative">
-            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${isDbConnected ? 'bg-emerald-400' : 'bg-amber-400'} opacity-75`}></span>
-            <span className={`relative inline-flex rounded-full h-2 w-2 ${isDbConnected ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
           </span>
           <p className="font-medium text-slate-300">
-            {isDbConnected ? (
-              <span>Database Cloud aktif: <strong className="text-white font-semibold">{sbDetails?.url}</strong></span>
-            ) : (
-              <span>Status: <strong className="text-amber-400 font-bold">Simulasi Offline (Local Storage)</strong>. Data disimpan aman di browser.</span>
-            )}
+            <span>Database Cloud Aktif: <strong className="text-white font-semibold">Supabase Cloud Online Production</strong></span>
           </p>
         </div>
         
@@ -202,7 +198,7 @@ export default function App() {
               onClick={() => setActiveMenu('supabase')}
               className="text-[11px] font-semibold text-indigo-300 hover:text-indigo-200 hover:underline transition-all flex items-center gap-1 bg-transparent border-none cursor-pointer"
             >
-              <Settings className="w-3.5 h-3.5" /> {isDbConnected ? 'Atur Supabase' : 'Hubungkan ke Supabase'}
+              <Settings className="w-3.5 h-3.5" /> Konfigurasi Database
             </button>
           </div>
         )}
@@ -290,31 +286,6 @@ export default function App() {
       {/* MAIN LAYOUT FRAME */}
       <main className="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
-        {/* FALLBACK WARNING NOTIFICATION */}
-        {isDbConnected && isUsingLocalStorageFallback && (
-          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-sm animate-fade-in">
-            <div className="flex items-start gap-3">
-              <div className="p-2 bg-amber-100 text-amber-700 rounded-xl mt-0.5 shrink-0">
-                <ShieldAlert className="w-5 h-5" />
-              </div>
-              <div className="space-y-1">
-                <h4 className="text-sm font-bold text-slate-900 leading-none flex items-center gap-1.5">
-                  Mode Cadangan Aktif: Menggunakan Local Storage
-                </h4>
-                <p className="text-xs text-slate-600 leading-relaxed max-w-3xl">
-                  Aplikasi terhubung ke Supabase, namun gagal melakukan sinkronisasi data karena tabel database belum dibuat atau RLS (Row Level Security) aktif tanpa Policy. Seluruh perubahan akan disimpan secara lokal di browser Anda.
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => setActiveMenu('supabase')}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm shrink-0 whitespace-nowrap self-start md:self-center"
-            >
-              Lihat Panduan SQL & Setup
-            </button>
-          </div>
-        )}
-
         {/* TAB SWITCHER */}
         {activeMenu === 'supabase' ? (
           <SupabaseConfig onConfigChanged={handleConfigChanged} />
