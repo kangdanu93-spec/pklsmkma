@@ -21,7 +21,7 @@ export const Login: React.FC<LoginProps> = ({ users, onLoginSuccess }) => {
     setError('');
 
     if (!email.trim() || !password.trim()) {
-      setError('Silakan masukkan email dan kata sandi Anda!');
+      setError('Silakan masukkan NISN / Email / Nomor Induk dan kata sandi Anda!');
       return;
     }
 
@@ -29,14 +29,18 @@ export const Login: React.FC<LoginProps> = ({ users, onLoginSuccess }) => {
 
     try {
       const sb = getSupabaseClient();
+      const inputVal = email.trim().toLowerCase();
+      // Match by email OR nomor_induk (NISN/NIP)
       const matchedUser = users.find(
-        (u) => u.email.toLowerCase() === email.trim().toLowerCase()
+        (u) => u.email.toLowerCase() === inputVal || u.nomor_induk.toLowerCase() === inputVal
       );
+
+      const loginEmail = matchedUser ? matchedUser.email : inputVal;
 
       if (sb) {
         // 1. Attempt login with official Supabase Auth
         const { data, error: authError } = await sb.auth.signInWithPassword({
-          email: email.trim().toLowerCase(),
+          email: loginEmail,
           password: password,
         });
 
@@ -65,14 +69,14 @@ export const Login: React.FC<LoginProps> = ({ users, onLoginSuccess }) => {
             const noSessionSb = getSupabaseNoSessionClient();
             if (noSessionSb) {
               const { data: signUpData, error: signUpError } = await noSessionSb.auth.signUp({
-                email: email.trim().toLowerCase(),
+                email: loginEmail,
                 password: password,
               });
 
               if (!signUpError && signUpData?.user) {
                 // Now perform official login with the main client to establish session
                 const { error: finalLoginError } = await sb.auth.signInWithPassword({
-                  email: email.trim().toLowerCase(),
+                  email: loginEmail,
                   password: password,
                 });
 
@@ -102,12 +106,12 @@ export const Login: React.FC<LoginProps> = ({ users, onLoginSuccess }) => {
             setError('Kata sandi yang Anda masukkan salah!');
           }
         } else {
-          setError('Akun dengan email tersebut tidak ditemukan!');
+          setError('Akun dengan identitas tersebut tidak ditemukan!');
         }
       } else {
         // 3. Fallback to Local Storage authentication if Supabase is offline/not set up
         if (!matchedUser) {
-          setError('Akun dengan email tersebut tidak ditemukan!');
+          setError('Akun dengan identitas tersebut tidak ditemukan!');
           setIsAuthenticating(false);
           return;
         }
@@ -241,18 +245,18 @@ export const Login: React.FC<LoginProps> = ({ users, onLoginSuccess }) => {
 
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Alamat Email</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">NISN / Email / Nomor Induk</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                     <Mail className="w-4 h-4" />
                   </div>
                   <input
-                    type="email"
+                    type="text"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     disabled={isAuthenticating}
-                    placeholder="nama@simpkl.com"
+                    placeholder="NISN, Email, atau NIP"
                     className="block w-full pl-10 pr-3.5 py-3 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-600/15 focus:border-indigo-600 focus:bg-white text-slate-800 transition-all font-medium disabled:opacity-50"
                   />
                 </div>

@@ -192,19 +192,15 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
         {
           'NISN': '1234567890',
           'Nama Lengkap': 'Budi Santoso',
-          'Email': 'budi.santoso@siswa.com',
           'Kelas': 'XII TKR',
           'Jurusan': 'Teknik Kendaraan Ringan',
-          'Nomor Telepon': '081234567890',
           'Password': 'password123'
         },
         {
           'NISN': '1234567891',
           'Nama Lengkap': 'Siti Aminah',
-          'Email': 'siti.aminah@siswa.com',
           'Kelas': 'XII DKV',
           'Jurusan': 'Desain Komunikasi Visual',
-          'Nomor Telepon': '081298765432',
           'Password': 'password123'
         }
       ];
@@ -215,10 +211,8 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
       const colWidths = [
         { wch: 15 }, // NISN
         { wch: 25 }, // Nama Lengkap
-        { wch: 25 }, // Email
         { wch: 12 }, // Kelas
         { wch: 30 }, // Jurusan
-        { wch: 15 }, // Nomor Telepon
         { wch: 15 }  // Password
       ];
       worksheet['!cols'] = colWidths;
@@ -252,7 +246,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
 
         // Check required columns
         const sampleRow = json[0];
-        const requiredFields = ['NISN', 'Nama Lengkap', 'Email', 'Kelas', 'Jurusan', 'Nomor Telepon'];
+        const requiredFields = ['NISN', 'Nama Lengkap', 'Kelas', 'Jurusan'];
         const missingFields = requiredFields.filter(f => !(f in sampleRow));
         if (missingFields.length > 0) {
           setImportStatus({ 
@@ -265,15 +259,15 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
         let errorCount = 0;
 
         for (const row of json) {
-          const email = String(row['Email'] || '').trim().toLowerCase();
           const nama = String(row['Nama Lengkap'] || '').trim();
           const nisn = String(row['NISN'] || '').trim();
           const kelas = String(row['Kelas'] || '').trim();
           const jurusan = String(row['Jurusan'] || '').trim();
-          const telepon = String(row['Nomor Telepon'] || '').trim();
           const password = String(row['Password'] || 'password123').trim();
+          const email = `${nisn}@siswa.simpkl.com`;
+          const telepon = '-';
 
-          if (!email || !nama || !nisn) {
+          if (!nisn || !nama) {
             errorCount++;
             continue;
           }
@@ -935,7 +929,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                         1. Unduh Template Excel
                       </h4>
                       <p className="text-[11px] text-slate-500 leading-relaxed">
-                        Gunakan file template Excel resmi untuk mengisi data seluruh siswa magang secara massal. Template ini telah disesuaikan dengan Kelas (<b>XII TKR, XII DKV</b>) dan Jurusan (<b>Teknik Kendaraan Ringan, Desain Komunikasi Visual</b>). Pastikan tidak mengubah susunan kolom.
+                        Gunakan file template Excel resmi untuk mengisi data seluruh siswa magang secara massal tanpa Email dan Nomor HP. Siswa akan login menggunakan <b>NISN</b> sebagai username. Template ini telah disesuaikan dengan Kelas (<b>XII TKR, XII DKV</b>) dan Jurusan (<b>Teknik Kendaraan Ringan, Desain Komunikasi Visual</b>). Pastikan tidak mengubah susunan kolom.
                       </p>
                     </div>
                     <button
