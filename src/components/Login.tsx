@@ -209,7 +209,7 @@ export const Login: React.FC<LoginProps> = ({ users, onLoginSuccess }) => {
                 <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-md">
                   <GraduationCap className="w-6 h-6" />
                 </div>
-                <span className="text-xl font-black text-slate-800 tracking-tight">SIM PKL</span>
+                <span className="text-xl font-black text-slate-800 tracking-tight">SIM PKL SMK MA</span>
               </div>
 
               {isCloudConnected ? (
@@ -290,7 +290,7 @@ export const Login: React.FC<LoginProps> = ({ users, onLoginSuccess }) => {
             </form>
 
             <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
-              <span>SIM PKL terintegrasi dengan Cloud Supabase</span>
+              <span>SIM PKL SMK MA terintegrasi dengan Cloud Supabase</span>
               <span className="font-semibold text-slate-500">v1.2</span>
             </div>
           </div>

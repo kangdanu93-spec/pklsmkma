@@ -200,7 +200,7 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-lg font-bold text-slate-900 tracking-tight flex items-center gap-1.5">
-                <span>SIM PKL</span> 
+                <span>SIM PKL SMK MA</span> 
                 <span className="text-xs bg-indigo-50 text-indigo-700 font-semibold px-2 py-0.5 rounded border border-indigo-100">v1.2</span>
               </h1>
               <p className="text-xs text-slate-400 font-medium">Sistem Informasi Manajemen Praktik Kerja Lapangan</p>
@@ -395,7 +395,7 @@ export default function App() {
       {/* FOOTER */}
       <footer className="bg-white border-t border-slate-100 py-6 mt-12 text-center text-xs text-slate-400">
         <div className="max-w-7xl mx-auto px-4">
-          <p className="font-medium text-slate-500">SIM PKL &copy; {new Date().getFullYear()} &bull; Sistem Manajemen Praktik Kerja Lapangan Terintegrasi Supabase</p>
+          <p className="font-medium text-slate-500">SIM PKL SMK MA &copy; {new Date().getFullYear()} &bull; Sistem Manajemen Praktik Kerja Lapangan Terintegrasi Supabase</p>
           <p className="text-[10px] mt-1 text-slate-400">Dioptimalkan untuk Siswa, Guru Pembimbing Sekolah, dan Mitra Industri Lapangan.</p>
         </div>
       </footer>
