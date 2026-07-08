@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, BookOpen, Send, CheckCircle, AlertCircle, RefreshCw, Star, Info, FileText, CheckCircle2, XCircle, MapPin, Navigation, Compass, Globe } from 'lucide-react';
 import { PklUser, PklInstansi, PklJournal, PklAttendance, PklPlacement, PklEvaluation, Announcement, MenuAccess } from '../types';
-import { dbGetJournals, dbSaveJournal, dbGetAttendance, dbSaveAttendance, dbGetPlacements, dbSavePlacement, dbGetInstansi, dbGetEvaluations, dbGetMenuAccess } from '../utils/localDb';
+import { dbGetJournals, dbSaveJournal, dbGetAttendance, dbSaveAttendance, dbGetPlacements, dbSavePlacement, dbGetInstansi, dbGetEvaluations, dbGetMenuAccess, dbGetUsers } from '../utils/localDb';
 
 interface StudentDashboardProps {
   student: PklUser;
@@ -24,6 +24,7 @@ export default function StudentDashboard({ student, instansiList, announcements 
   };
 
   // Data states
+  const [users, setUsers] = useState<PklUser[]>([]);
   const [journals, setJournals] = useState<PklJournal[]>([]);
   const [attendanceLogs, setAttendanceLogs] = useState<PklAttendance[]>([]);
   const [placement, setPlacement] = useState<PklPlacement | null>(null);
@@ -100,6 +101,10 @@ export default function StudentDashboard({ student, instansiList, announcements 
   const fetchStudentData = async () => {
     setLoading(true);
     try {
+      // Users
+      const resUsers = await dbGetUsers();
+      setUsers(resUsers.data || []);
+
       // Journals
       const resJour = await dbGetJournals();
       setJournals(resJour.data.filter(j => j.id_siswa === student.id));
@@ -217,31 +222,6 @@ export default function StudentDashboard({ student, instansiList, announcements 
         fetchStudentData();
         setTimeout(() => setAttSuccess(''), 4000);
       }
-    }
-  };
-
-  const handleApplyPlacement = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!applyInstansiId) {
-      alert('Silakan pilih instansi!');
-      return;
-    }
-
-    const newPlacement: PklPlacement = {
-      id: placement?.id || `place-${Date.now()}`,
-      id_siswa: student.id,
-      id_instansi: applyInstansiId,
-      tanggal_mulai: applyStart,
-      tanggal_selesai: applyEnd,
-      status: 'pending',
-      catatan: placement?.catatan || 'Mengajukan dari dashboard siswa.'
-    };
-
-    const res = await dbSavePlacement(newPlacement);
-    if (res.success) {
-      setApplySuccess('Pengajuan tempat PKL berhasil dikirim!');
-      fetchStudentData();
-      setTimeout(() => setApplySuccess(''), 4000);
     }
   };
 
@@ -695,76 +675,46 @@ export default function StudentDashboard({ student, instansiList, announcements 
             </div>
           )}
 
-          {/* 4. PENGAJUAN TEMPAT PKL (JIKA BELUM DISETUJUI) */}
-          {isFeatureAllowed('siswa_pengajuan') && (!placement || placement.status !== 'disetujui') && (
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6" id="apply-placement-section">
-              <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2 mb-4">
-                <FileText className="w-5 h-5 text-indigo-600" /> Form Pengajuan Tempat PKL
-              </h3>
+          {/* 4. STATUS PENEMPATAN & PLOTTING ADMIN */}
+          {(!placement || placement.status !== 'disetujui') && (
+            <div className="bg-gradient-to-br from-amber-500/5 to-amber-500/10 rounded-2xl border border-amber-500/20 shadow-lg p-6 space-y-4" id="apply-placement-section">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-amber-500/10 rounded-xl border border-amber-500/20 text-amber-500">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-amber-500 font-sans tracking-wide">Informasi Pemetaan (Plotting) PKL</h3>
+                  <p className="text-xs text-slate-400">Prosedur penempatan industri & pembimbing siswa.</p>
+                </div>
+              </div>
               
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-sm text-slate-600 leading-relaxed mb-6">
-                <p className="flex gap-2 font-medium text-slate-700">
-                  <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-                  {placement?.status === 'pending' ? (
-                    <span>Pengajuan Anda sedang dikaji oleh Koordinator PKL. Anda belum bisa mengisi jurnal harian sebelum pengajuan disetujui.</span>
-                  ) : placement?.status === 'ditolak' ? (
-                    <span>Pengajuan Anda ditolak dengan catatan: <strong className="text-rose-600">{placement.catatan}</strong>. Silakan ajukan ulang ke tempat lain.</span>
-                  ) : (
-                    <span>Anda belum terdaftar di tempat PKL mana pun. Silakan lengkapi formulir di bawah untuk mengajukan penempatan PKL Anda.</span>
-                  )}
+              <div className="text-sm text-slate-300 leading-relaxed space-y-4">
+                <p>
+                  Sesuai kebijakan sekolah, seluruh proses <strong>Plotting Instansi PKL</strong> dan <strong>Guru Pembimbing</strong> dilakukan sepenuhnya secara sepihak oleh <strong>Admin / Koordinator PKL</strong> sekolah. Siswa tidak perlu mengajukan secara mandiri.
+                </p>
+                
+                <div className="p-4 bg-slate-900/60 rounded-xl border border-amber-500/15 space-y-2.5">
+                  <p className="font-bold text-xs text-amber-400 uppercase tracking-wider">Status Pemetaan Anda Saat Ini:</p>
+                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-300">
+                    <li className="flex flex-col gap-1 bg-[#151520] p-2.5 rounded-lg border border-slate-800">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase">Instansi PKL</span>
+                      <span className="font-semibold text-white">
+                        {myCompany?.nama_instansi || 'Menunggu Plotting Admin'}
+                      </span>
+                    </li>
+                    <li className="flex flex-col gap-1 bg-[#151520] p-2.5 rounded-lg border border-slate-800">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase">Guru Pembimbing</span>
+                      <span className="font-semibold text-white">
+                        {student.id_pembimbing ? (users.find(u => u.id === student.id_pembimbing)?.nama || 'Terplot') : 'Menunggu Plotting Admin'}
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+                
+                <p className="text-xs text-slate-400 italic">
+                  *Silakan hubungi Koordinator PKL di Ruang Hubungan Industri jika memiliki pertanyaan atau kendala terkait penempatan.
                 </p>
               </div>
-
-              <form onSubmit={handleApplyPlacement} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1.5">Pilih Instansi / Perusahaan</label>
-                  <select
-                    value={applyInstansiId}
-                    onChange={(e) => setApplyInstansiId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none bg-white"
-                  >
-                    {instansiList.map((inst) => (
-                      <option key={inst.id} value={inst.id}>
-                        {inst.nama_instansi} - (Kuota Sisa: {inst.kuota} Siswa)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1.5">Tanggal Mulai PKL</label>
-                    <input
-                      type="date"
-                      required
-                      value={applyStart}
-                      onChange={(e) => setApplyStart(e.target.value)}
-                      className="w-full px-3.5 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1.5">Tanggal Selesai PKL</label>
-                    <input
-                      type="date"
-                      required
-                      value={applyEnd}
-                      onChange={(e) => setApplyEnd(e.target.value)}
-                      className="w-full px-3.5 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none bg-white"
-                    />
-                  </div>
-                </div>
-
-                <div className="pt-2 flex items-center justify-between">
-                  {applySuccess && <span className="text-xs text-emerald-600 font-semibold">{applySuccess}</span>}
-                  <span />
-                  <button
-                    type="submit"
-                    className="px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition-all shadow-sm"
-                  >
-                    Ajukan Tempat PKL
-                  </button>
-                </div>
-              </form>
             </div>
           )}
 

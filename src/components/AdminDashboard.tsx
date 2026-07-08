@@ -115,6 +115,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
   const [editingStudentMasterId, setEditingStudentMasterId] = useState<string | null>(null);
   const [editingTeacherMasterId, setEditingTeacherMasterId] = useState<string | null>(null);
   const [tempPembimbingId, setTempPembimbingId] = useState('');
+  const [tempInstansiId, setTempInstansiId] = useState('');
   const [studentSearch, setStudentSearch] = useState('');
   const [teacherSearch, setTeacherSearch] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
@@ -666,15 +667,30 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
     if (studentUser) {
       const updatedUser: PklUser = {
         ...studentUser,
+        id_instansi: tempInstansiId || undefined,
         id_pembimbing: tempPembimbingId || undefined
       };
       const res = await dbSaveUser(updatedUser);
       if (res.success) {
+        if (tempInstansiId) {
+          const existingPlace = placements.find(p => p.id_siswa === studentId);
+          const newPlacement: PklPlacement = {
+            id: existingPlace?.id || `place-${Date.now()}`,
+            id_siswa: studentId,
+            id_instansi: tempInstansiId,
+            tanggal_mulai: existingPlace?.tanggal_mulai || '2026-07-01',
+            tanggal_selesai: existingPlace?.tanggal_selesai || '2026-10-01',
+            status: 'disetujui',
+            catatan: 'Penempatan diplot langsung oleh Admin Koordinator.'
+          };
+          await dbSavePlacement(newPlacement);
+        }
         setEditingStudentId(null);
         setTempPembimbingId('');
+        setTempInstansiId('');
         fetchAdminData();
         onRefreshGlobalData();
-        alert('Guru pembimbing berhasil dipetakan!');
+        alert('Penempatan Instansi PKL dan Guru pembimbing berhasil disimpan!');
       }
     }
   };
@@ -1104,8 +1120,8 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
               <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-4">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
                   <div>
-                    <h3 className="text-base font-bold text-slate-800">Pemetaan (Plotting) Guru Pembimbing Siswa</h3>
-                    <p className="text-xs text-slate-400">Hubungkan setiap siswa magang dengan Guru Pembimbing masing-masing.</p>
+                    <h3 className="text-base font-bold text-slate-800">Pemetaan (Plotting) Instansi & Guru Pembimbing Siswa</h3>
+                    <p className="text-xs text-slate-400">Hubungkan setiap siswa magang dengan Instansi PKL dan Guru Pembimbing masing-masing.</p>
                   </div>
 
                   {/* Filters Grid */}
@@ -1207,63 +1223,77 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                                 const company = instansiList.find(i => i.id === stud.id_instansi);
                                 const currentTeacher = teachers.find(t => t.id === stud.id_pembimbing);
                                 
-                                return (
-                                  <tr key={stud.id} className="hover:bg-slate-50/50">
-                                    <td className="py-3 pr-4">
-                                      <span className="font-semibold text-slate-800 block">{stud.nama}</span>
-                                      <span className="text-[10px] text-slate-400">{stud.kelas || 'No Kelas'} • NISN: {stud.nomor_induk}</span>
-                                    </td>
-                                    <td className="py-3 px-4 font-medium text-slate-700">
-                                      {company?.nama_instansi || 'Belum Penempatan'}
-                                    </td>
-                                    <td className="py-3 px-4">
-                                      {isEditing ? (
-                                        <select
-                                          value={tempPembimbingId}
-                                          onChange={(e) => setTempPembimbingId(e.target.value)}
-                                          className="px-2 py-1 rounded border border-slate-200 focus:outline-none bg-white text-slate-800"
-                                        >
-                                          <option value="">-- Pilih Guru --</option>
-                                          {teachers.map(t => (
-                                            <option key={t.id} value={t.id}>{t.nama}</option>
-                                          ))}
-                                        </select>
-                                      ) : (
-                                        <span className={`font-medium ${currentTeacher ? 'text-indigo-600' : 'text-slate-400 italic'}`}>
-                                          {currentTeacher ? currentTeacher.nama : 'Belum diplot'}
-                                        </span>
-                                      )}
-                                    </td>
-                                    <td className="py-3 pl-4 text-right">
-                                      {isEditing ? (
-                                        <div className="flex gap-1 justify-end">
-                                          <button
-                                            onClick={() => setEditingStudentId(null)}
-                                            className="px-2 py-1 rounded bg-slate-100 text-slate-600 font-semibold"
+                                  return (
+                                    <tr key={stud.id} className="hover:bg-slate-50/50">
+                                      <td className="py-3 pr-4">
+                                        <span className="font-semibold text-slate-800 block">{stud.nama}</span>
+                                        <span className="text-[10px] text-slate-400">{stud.kelas || 'No Kelas'} • NISN: {stud.nomor_induk}</span>
+                                      </td>
+                                      <td className="py-3 px-4 font-medium text-slate-700">
+                                        {isEditing ? (
+                                          <select
+                                            value={tempInstansiId}
+                                            onChange={(e) => setTempInstansiId(e.target.value)}
+                                            className="px-2 py-1 rounded border border-slate-200 focus:outline-none bg-white text-slate-800 text-xs w-full max-w-[180px]"
                                           >
-                                            Batal
-                                          </button>
-                                          <button
-                                            onClick={() => handleUpdatePembimbing(stud.id)}
-                                            className="px-2 py-1 rounded bg-indigo-600 text-white font-semibold flex items-center gap-0.5"
+                                            <option value="">-- Pilih Instansi --</option>
+                                            {instansiList.map(inst => (
+                                              <option key={inst.id} value={inst.id}>{inst.nama_instansi}</option>
+                                            ))}
+                                          </select>
+                                        ) : (
+                                          company?.nama_instansi || <span className="text-slate-400 italic">Belum diplot</span>
+                                        )}
+                                      </td>
+                                      <td className="py-3 px-4">
+                                        {isEditing ? (
+                                          <select
+                                            value={tempPembimbingId}
+                                            onChange={(e) => setTempPembimbingId(e.target.value)}
+                                            className="px-2 py-1 rounded border border-slate-200 focus:outline-none bg-white text-slate-800 text-xs"
                                           >
-                                            <Check className="w-3 h-3" /> Simpan
+                                            <option value="">-- Pilih Guru --</option>
+                                            {teachers.map(t => (
+                                              <option key={t.id} value={t.id}>{t.nama}</option>
+                                            ))}
+                                          </select>
+                                        ) : (
+                                          <span className={`font-medium ${currentTeacher ? 'text-indigo-600' : 'text-slate-400 italic'}`}>
+                                            {currentTeacher ? currentTeacher.nama : 'Belum diplot'}
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="py-3 pl-4 text-right">
+                                        {isEditing ? (
+                                          <div className="flex gap-1 justify-end">
+                                            <button
+                                              onClick={() => setEditingStudentId(null)}
+                                              className="px-2 py-1 rounded bg-slate-100 text-slate-600 font-semibold text-xs"
+                                            >
+                                              Batal
+                                            </button>
+                                            <button
+                                              onClick={() => handleUpdatePembimbing(stud.id)}
+                                              className="px-2 py-1 rounded bg-indigo-600 text-white font-semibold text-xs flex items-center gap-0.5"
+                                            >
+                                              <Check className="w-3 h-3" /> Simpan
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <button
+                                            onClick={() => {
+                                              setEditingStudentId(stud.id);
+                                              setTempPembimbingId(stud.id_pembimbing || '');
+                                              setTempInstansiId(stud.id_instansi || '');
+                                            }}
+                                            className="text-xs text-indigo-600 hover:underline font-semibold"
+                                          >
+                                            Plot Siswa
                                           </button>
-                                        </div>
-                                      ) : (
-                                        <button
-                                          onClick={() => {
-                                            setEditingStudentId(stud.id);
-                                            setTempPembimbingId(stud.id_pembimbing || '');
-                                          }}
-                                          className="text-xs text-indigo-600 hover:underline font-semibold"
-                                        >
-                                          Plot Guru
-                                        </button>
-                                      )}
-                                    </td>
-                                  </tr>
-                                );
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
                               })}
                             </tbody>
                           </table>

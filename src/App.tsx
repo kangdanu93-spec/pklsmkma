@@ -318,9 +318,11 @@ export default function App() {
 
       {/* FOOTER */}
       <footer className="bg-white border-t border-slate-100 py-6 mt-12 text-center text-xs text-slate-400">
-        <div className="max-w-7xl mx-auto px-4">
-          <p className="font-medium text-slate-500">SIM PKL SMK MA &copy; {new Date().getFullYear()} &bull; Sistem Manajemen Praktik Kerja Lapangan</p>
-          <p className="text-[10px] mt-1 text-slate-400">Dioptimalkan untuk Siswa, Guru Pembimbing Sekolah, dan Mitra Industri Lapangan.</p>
+        <div className="max-w-7xl mx-auto px-4 space-y-1">
+          <p className="font-semibold text-slate-400">
+            SIM PKL SMK MA &copy; 2026 &bull; by <a href="https://tutordigital.id" target="_blank" rel="noreferrer" className="text-indigo-500 font-bold hover:underline">tutordigital.id</a>
+          </p>
+          <p className="text-slate-500 font-medium text-xs">Sistem Manajemen Praktik Kerja Lapangan</p>
         </div>
       </footer>
 
