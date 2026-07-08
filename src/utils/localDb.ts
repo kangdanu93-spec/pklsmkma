@@ -139,6 +139,7 @@ ON CONFLICT (id) DO NOTHING;
 -- Tambahkan data pengguna awal
 INSERT INTO pkl_users (id, email, password, nama, role, nomor_induk, telepon, kelas, jurusan, id_instansi, id_pembimbing) VALUES
 ('admin@simpkl.com', 'admin@simpkl.com', 'password123', 'Danu Prasetyo (Koordinator)', 'admin', 'NIP990022', '081122334455', NULL, NULL, NULL, NULL),
+('panitia@simpkl.com', 'panitia@simpkl.com', 'password123', 'Hendi Wijaya (Panitia PKL)', 'admin', 'NIP990033', '081223344556', NULL, NULL, NULL, NULL),
 ('budi@simpkl.com', 'budi@simpkl.com', 'password123', 'Drs. Budi Santoso', 'guru', 'NIP19750821', '081211223344', NULL, NULL, NULL, NULL),
 ('sri@simpkl.com', 'sri@simpkl.com', 'password123', 'Sri Wahyuni M.Kom', 'guru', 'NIP19820412', '081299887766', NULL, NULL, NULL, NULL),
 ('joko@solusidigital.com', 'joko@solusidigital.com', 'password123', 'Joko Prasetyo (PT. Solusi Digital)', 'industri', 'NIKSD098', '081234567800', NULL, NULL, '8a123bc4-56de-78fa-90bc-123456789abc', NULL),
@@ -159,6 +160,8 @@ const INITIAL_INSTANSI: PklInstansi[] = [
 const INITIAL_USERS: PklUser[] = [
   // Admin
   { id: 'admin@simpkl.com', email: 'admin@simpkl.com', password: 'password123', nama: 'Danu Prasetyo (Koordinator)', role: 'admin', nomor_induk: 'NIP990022', telepon: '081122334455' },
+  // Panitia PKL (Admin Monitoring Only)
+  { id: 'panitia@simpkl.com', email: 'panitia@simpkl.com', password: 'password123', nama: 'Hendi Wijaya (Panitia PKL)', role: 'admin', nomor_induk: 'NIP990033', telepon: '081223344556' },
   // Guru
   { id: 'budi@simpkl.com', email: 'budi@simpkl.com', password: 'password123', nama: 'Drs. Budi Santoso', role: 'guru', nomor_induk: 'NIP19750821', telepon: '081211223344' },
   { id: 'sri@simpkl.com', email: 'sri@simpkl.com', password: 'password123', nama: 'Sri Wahyuni M.Kom', role: 'guru', nomor_induk: 'NIP19820412', telepon: '081299887766' },
@@ -236,10 +239,15 @@ function initializeLocalStorage() {
       if (usersRaw) {
         const users = JSON.parse(usersRaw) as PklUser[];
         const hasAdmin = users.some(u => u.email === 'admin@simpkl.com');
+        const hasPanitia = users.some(u => u.email === 'panitia@simpkl.com');
         let updated = false;
         
         if (!hasAdmin) {
           users.push(INITIAL_USERS[0]); // Ensure admin is always there
+          updated = true;
+        }
+        if (!hasPanitia) {
+          users.push(INITIAL_USERS[1]); // Ensure panitia is always there
           updated = true;
         }
 

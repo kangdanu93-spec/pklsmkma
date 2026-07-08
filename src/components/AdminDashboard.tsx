@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Building2, Users, FileCheck, Calendar, Star, RefreshCw, Plus, Trash2, 
+  Building2, Users, FileCheck, Calendar, Star, RefreshCw, Plus, Trash2, Edit,
   UserPlus, Check, X, ClipboardList, ShieldAlert, Download, Phone, MapPin,
   FileSpreadsheet, UploadCloud, Shield, BookOpen, GraduationCap, UserCheck,
-  Settings, Megaphone, Search, ChevronLeft, ChevronRight
+  Settings, Megaphone, Search, ChevronLeft, ChevronRight, Database
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { PklUser, PklInstansi, PklPlacement, PklEvaluation, Announcement, UserRole, PklClass, MenuAccess } from '../types';
@@ -39,6 +39,7 @@ interface AdminDashboardProps {
 }
 
 export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDashboardProps) {
+  const isMonitoringOnly = !isSuperAdmin(admin);
   const [users, setUsers] = useState<PklUser[]>([]);
   const [instansiList, setInstansiList] = useState<PklInstansi[]>([]);
   const [placements, setPlacements] = useState<PklPlacement[]>([]);
@@ -50,6 +51,21 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
 
   // Active sub-tab state ('placements' | 'students' | 'teachers' | 'users' | 'companies' | 'reports' | 'classes' | 'permissions' | 'announcements')
   const [activeTab, setActiveTab] = useState<'placements' | 'students' | 'teachers' | 'users' | 'companies' | 'reports' | 'classes' | 'permissions' | 'announcements'>('placements');
+
+  // Sidebar Menu Group open/close states
+  const [openGroups, setOpenGroups] = useState({
+    transaksi: true,
+    master: true,
+    laporan: true,
+    sistem: true,
+  });
+
+  const toggleGroup = (group: 'transaksi' | 'master' | 'laporan' | 'sistem') => {
+    setOpenGroups(prev => ({
+      ...prev,
+      [group]: !prev[group]
+    }));
+  };
 
   // Plotting list filter & pagination states
   const [plottingSearch, setPlottingSearch] = useState('');
@@ -104,6 +120,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
   const [instPembimbingNama, setInstPembimbingNama] = useState('');
   const [instPembimbingTelp, setInstPembimbingTelp] = useState('');
   const [instSuccess, setInstSuccess] = useState('');
+  const [editingInstansiId, setEditingInstansiId] = useState<string | null>(null);
 
   // New Announcement Form State
   const [annTitle, setAnnTitle] = useState('');
@@ -163,6 +180,18 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
   useEffect(() => {
     fetchAdminData();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'placements') {
+      setOpenGroups(prev => ({ ...prev, transaksi: true }));
+    } else if (['students', 'teachers', 'companies', 'classes', 'users'].includes(activeTab)) {
+      setOpenGroups(prev => ({ ...prev, master: true }));
+    } else if (['reports', 'announcements'].includes(activeTab)) {
+      setOpenGroups(prev => ({ ...prev, laporan: true }));
+    } else if (activeTab === 'permissions') {
+      setOpenGroups(prev => ({ ...prev, sistem: true }));
+    }
+  }, [activeTab]);
 
   const fetchAdminData = async () => {
     setLoading(true);
@@ -593,15 +622,15 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
   };
 
   // ---------------- INSTANSI MANAGEMENT ----------------
-  const handleAddInstansi = async (e: React.FormEvent) => {
+  const handleSaveInstansi = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!instNama.trim() || !instAlamat.trim()) {
       alert('Silakan lengkapi nama dan alamat instansi!');
       return;
     }
 
-    const newInstansi: PklInstansi = {
-      id: `inst-${Date.now()}`,
+    const instansiToSave: PklInstansi = {
+      id: editingInstansiId || `inst-${Date.now()}`,
       nama_instansi: instNama.trim(),
       alamat: instAlamat.trim(),
       kuota: Number(instKuota),
@@ -609,14 +638,15 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
       pembimbing_telp: instPembimbingTelp.trim() || undefined,
     };
 
-    const res = await dbSaveInstansi(newInstansi);
+    const res = await dbSaveInstansi(instansiToSave);
     if (res.success) {
-      setInstSuccess('Instansi/Perusahaan berhasil ditambahkan!');
+      setInstSuccess(editingInstansiId ? 'Instansi/Perusahaan berhasil diperbarui!' : 'Instansi/Perusahaan berhasil ditambahkan!');
       setInstNama('');
       setInstAlamat('');
       setInstKuota(1);
       setInstPembimbingNama('');
       setInstPembimbingTelp('');
+      setEditingInstansiId(null);
       fetchAdminData();
       onRefreshGlobalData();
       setTimeout(() => setInstSuccess(''), 4000);
@@ -867,6 +897,26 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
   return (
     <div className="space-y-8" id="admin-dashboard">
       
+      {/* MONITORING ONLY / PANITIA PKL BANNER */}
+      {isMonitoringOnly && (
+        <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xs">
+          <div className="flex gap-3">
+            <div className="p-2.5 bg-amber-500 text-white rounded-xl shadow-md shadow-amber-500/10 shrink-0">
+              <Shield className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-800 leading-tight">Mode Monitoring Aktif (Panitia PKL)</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Anda masuk sebagai anggota <strong className="text-slate-700">Panitia PKL</strong>. Anda memiliki hak akses penuh untuk melakukan monitoring dan pengawasan kegiatan PKL, rekapitulasi data, serta mengunduh berkas laporan tanpa hak modifikasi database utama.
+              </p>
+            </div>
+          </div>
+          <span className="text-[10px] bg-amber-500 text-white font-extrabold px-3 py-1.5 rounded-xl uppercase tracking-wider shrink-0 select-none">
+            Read-Only Monitor
+          </span>
+        </div>
+      )}
+      
       {/* 1. ADMIN HEAD STATISTICS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
@@ -918,129 +968,204 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
         
         {/* SIDEBAR NAVIGATION - VERTICAL STACKED (BERTINGKAT) */}
         <div className="lg:col-span-3">
-          <div className="bg-slate-50/80 border border-slate-200/60 rounded-2xl p-4 space-y-1.5 lg:sticky lg:top-6">
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block px-3 mb-2">Menu Kontrol Admin</span>
+          <div className="bg-slate-50/80 border border-slate-200/60 rounded-2xl p-4 space-y-3 lg:sticky lg:top-6 shadow-xs">
+            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block px-1">Menu Kontrol Admin</span>
             
-            <div className="flex flex-col gap-1">
-              {isTabAllowed('admin_plotting') && (
+            <div className="flex flex-col gap-3">
+              {/* GROUP 1: PLOTTING & TRANSAKSI (AKTIVITAS) */}
+              <div className="space-y-1">
                 <button
-                  onClick={() => setActiveTab('placements')}
-                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold rounded-xl transition-all ${
-                    activeTab === 'placements' 
-                      ? 'bg-indigo-600 text-white shadow-sm font-bold' 
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
-                  }`}
+                  type="button"
+                  onClick={() => toggleGroup('transaksi')}
+                  className="w-full flex items-center justify-between px-2 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider hover:bg-slate-200/40 rounded-lg transition-colors cursor-pointer"
                 >
-                  <ClipboardList className={`w-4 h-4 shrink-0 ${activeTab === 'placements' ? 'text-white' : 'text-slate-400'}`} />
-                  <span className="truncate">Plotting & Pengajuan PKL</span>
+                  <span className="flex items-center gap-1.5">
+                    <ClipboardList className="w-3.5 h-3.5 text-indigo-500" />
+                    Aktivitas & Plotting
+                  </span>
+                  <ChevronRight className={`w-3 h-3 transition-transform duration-200 ${openGroups.transaksi ? 'rotate-90 text-slate-600' : 'text-slate-400'}`} />
                 </button>
-              )}
-              {isTabAllowed('admin_siswa') && (
-                <button
-                  onClick={() => { setActiveTab('students'); setUserRole('siswa'); }}
-                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold rounded-xl transition-all ${
-                    activeTab === 'students' 
-                      ? 'bg-indigo-600 text-white shadow-sm font-bold' 
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
-                  }`}
-                >
-                  <GraduationCap className={`w-4 h-4 shrink-0 ${activeTab === 'students' ? 'text-white' : 'text-slate-400'}`} />
-                  <span className="truncate">Master Data Siswa</span>
-                </button>
-              )}
-              {isTabAllowed('admin_guru') && (
-                <button
-                  onClick={() => { setActiveTab('teachers'); setUserRole('guru'); }}
-                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold rounded-xl transition-all ${
-                    activeTab === 'teachers' 
-                      ? 'bg-indigo-600 text-white shadow-sm font-bold' 
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
-                  }`}
-                >
-                  <UserCheck className={`w-4 h-4 shrink-0 ${activeTab === 'teachers' ? 'text-white' : 'text-slate-400'}`} />
-                  <span className="truncate">Master Guru Pembimbing</span>
-                </button>
-              )}
-              {isTabAllowed('admin_pengguna') && (
-                <button
-                  onClick={() => { setActiveTab('users'); setUserRole('siswa'); }}
-                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold rounded-xl transition-all ${
-                    activeTab === 'users' 
-                      ? 'bg-indigo-600 text-white shadow-sm font-bold' 
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
-                  }`}
-                >
-                  <Settings className={`w-4 h-4 shrink-0 ${activeTab === 'users' ? 'text-white' : 'text-slate-400'}`} />
-                  <span className="truncate">Kelola Pengguna</span>
-                </button>
-              )}
-              {isTabAllowed('admin_instansi') && (
-                <button
-                  onClick={() => setActiveTab('companies')}
-                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold rounded-xl transition-all ${
-                    activeTab === 'companies' 
-                      ? 'bg-indigo-600 text-white shadow-sm font-bold' 
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
-                  }`}
-                >
-                  <Building2 className={`w-4 h-4 shrink-0 ${activeTab === 'companies' ? 'text-white' : 'text-slate-400'}`} />
-                  <span className="truncate">Kelola Instansi</span>
-                </button>
-              )}
-              {isTabAllowed('admin_kelas') && (
-                <button
-                  onClick={() => setActiveTab('classes')}
-                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold rounded-xl transition-all ${
-                    activeTab === 'classes' 
-                      ? 'bg-indigo-600 text-white shadow-sm font-bold' 
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
-                  }`}
-                >
-                  <BookOpen className={`w-4 h-4 shrink-0 ${activeTab === 'classes' ? 'text-white' : 'text-slate-400'}`} />
-                  <span className="truncate">Master Kelas</span>
-                </button>
-              )}
-              {isTabAllowed('admin_rekap') && (
-                <button
-                  onClick={() => setActiveTab('reports')}
-                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold rounded-xl transition-all ${
-                    activeTab === 'reports' 
-                      ? 'bg-indigo-600 text-white shadow-sm font-bold' 
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
-                  }`}
-                >
-                  <FileCheck className={`w-4 h-4 shrink-0 ${activeTab === 'reports' ? 'text-white' : 'text-slate-400'}`} />
-                  <span className="truncate">Laporan Rekap Nilai</span>
-                </button>
-              )}
+                
+                {openGroups.transaksi && (
+                  <div className="flex flex-col gap-1 pl-2 mt-1 border-l border-slate-200 ml-2">
+                    {isTabAllowed('admin_plotting') && (
+                      <button
+                        onClick={() => setActiveTab('placements')}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-xl transition-all ${
+                          activeTab === 'placements' 
+                            ? 'bg-indigo-600 text-white shadow-sm font-bold' 
+                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
+                        }`}
+                      >
+                        <ClipboardList className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'placements' ? 'text-white' : 'text-slate-400'}`} />
+                        <span className="truncate">Plotting & Pengajuan PKL</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
 
-              {isTabAllowed('admin_pengumuman') && (
+              {/* GROUP 2: MASTER DATA */}
+              <div className="space-y-1">
                 <button
-                  onClick={() => setActiveTab('announcements')}
-                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold rounded-xl transition-all ${
-                    activeTab === 'announcements' 
-                      ? 'bg-indigo-600 text-white shadow-sm font-bold' 
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
-                  }`}
+                  type="button"
+                  onClick={() => toggleGroup('master')}
+                  className="w-full flex items-center justify-between px-2 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider hover:bg-slate-200/40 rounded-lg transition-colors cursor-pointer"
                 >
-                  <Megaphone className={`w-4 h-4 shrink-0 ${activeTab === 'announcements' ? 'text-white' : 'text-slate-400'}`} />
-                  <span className="truncate">Kelola Pengumuman</span>
+                  <span className="flex items-center gap-1.5">
+                    <Database className="w-3.5 h-3.5 text-indigo-500" />
+                    Master Data
+                  </span>
+                  <ChevronRight className={`w-3 h-3 transition-transform duration-200 ${openGroups.master ? 'rotate-90 text-slate-600' : 'text-slate-400'}`} />
                 </button>
-              )}
-              
-              <div className="h-px bg-slate-200 my-1.5" />
-              
-              <button
-                onClick={() => setActiveTab('permissions')}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs font-semibold rounded-xl transition-all ${
-                  activeTab === 'permissions' 
-                    ? 'bg-indigo-600 text-white shadow-sm font-bold' 
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
-                }`}
-              >
-                <Shield className={`w-4 h-4 shrink-0 ${activeTab === 'permissions' ? 'text-white' : 'text-slate-400'}`} />
-                <span className="truncate">Hak Akses Menu</span>
-              </button>
+                
+                {openGroups.master && (
+                  <div className="flex flex-col gap-1 pl-2 mt-1 border-l border-slate-200 ml-2">
+                    {isTabAllowed('admin_siswa') && (
+                      <button
+                        onClick={() => { setActiveTab('students'); setUserRole('siswa'); }}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-xl transition-all ${
+                          activeTab === 'students' 
+                            ? 'bg-indigo-600 text-white shadow-sm font-bold' 
+                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
+                        }`}
+                      >
+                        <GraduationCap className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'students' ? 'text-white' : 'text-slate-400'}`} />
+                        <span className="truncate">Master Data Siswa</span>
+                      </button>
+                    )}
+                    {isTabAllowed('admin_guru') && (
+                      <button
+                        onClick={() => { setActiveTab('teachers'); setUserRole('guru'); }}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-xl transition-all ${
+                          activeTab === 'teachers' 
+                            ? 'bg-indigo-600 text-white shadow-sm font-bold' 
+                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
+                        }`}
+                      >
+                        <UserCheck className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'teachers' ? 'text-white' : 'text-slate-400'}`} />
+                        <span className="truncate">Master Guru Pembimbing</span>
+                      </button>
+                    )}
+                    {isTabAllowed('admin_instansi') && (
+                      <button
+                        onClick={() => setActiveTab('companies')}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-xl transition-all ${
+                          activeTab === 'companies' 
+                            ? 'bg-indigo-600 text-white shadow-sm font-bold' 
+                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
+                        }`}
+                      >
+                        <Building2 className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'companies' ? 'text-white' : 'text-slate-400'}`} />
+                        <span className="truncate font-semibold">Master Instansi PKL</span>
+                      </button>
+                    )}
+                    {isTabAllowed('admin_kelas') && (
+                      <button
+                        onClick={() => setActiveTab('classes')}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-xl transition-all ${
+                          activeTab === 'classes' 
+                            ? 'bg-indigo-600 text-white shadow-sm font-bold' 
+                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
+                        }`}
+                      >
+                        <BookOpen className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'classes' ? 'text-white' : 'text-slate-400'}`} />
+                        <span className="truncate">Master Kelas & Jurusan</span>
+                      </button>
+                    )}
+                    {isTabAllowed('admin_pengguna') && (
+                      <button
+                        onClick={() => { setActiveTab('users'); setUserRole('siswa'); }}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-xl transition-all ${
+                          activeTab === 'users' 
+                            ? 'bg-indigo-600 text-white shadow-sm font-bold' 
+                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
+                        }`}
+                      >
+                        <Settings className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'users' ? 'text-white' : 'text-slate-400'}`} />
+                        <span className="truncate">Kelola Akun Login</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* GROUP 3: LAPORAN & KOMUNIKASI */}
+              <div className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => toggleGroup('laporan')}
+                  className="w-full flex items-center justify-between px-2 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider hover:bg-slate-200/40 rounded-lg transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <FileCheck className="w-3.5 h-3.5 text-indigo-500" />
+                    Laporan & Informasi
+                  </span>
+                  <ChevronRight className={`w-3 h-3 transition-transform duration-200 ${openGroups.laporan ? 'rotate-90 text-slate-600' : 'text-slate-400'}`} />
+                </button>
+                
+                {openGroups.laporan && (
+                  <div className="flex flex-col gap-1 pl-2 mt-1 border-l border-slate-200 ml-2">
+                    {isTabAllowed('admin_rekap') && (
+                      <button
+                        onClick={() => setActiveTab('reports')}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-xl transition-all ${
+                          activeTab === 'reports' 
+                            ? 'bg-indigo-600 text-white shadow-sm font-bold' 
+                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
+                        }`}
+                      >
+                        <FileCheck className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'reports' ? 'text-white' : 'text-slate-400'}`} />
+                        <span className="truncate">Laporan Rekap Nilai</span>
+                      </button>
+                    )}
+                    {isTabAllowed('admin_pengumuman') && (
+                      <button
+                        onClick={() => setActiveTab('announcements')}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-xl transition-all ${
+                          activeTab === 'announcements' 
+                            ? 'bg-indigo-600 text-white shadow-sm font-bold' 
+                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
+                        }`}
+                      >
+                        <Megaphone className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'announcements' ? 'text-white' : 'text-slate-400'}`} />
+                        <span className="truncate">Kelola Pengumuman</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* GROUP 4: KEAMANAN & SISTEM */}
+              <div className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => toggleGroup('sistem')}
+                  className="w-full flex items-center justify-between px-2 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider hover:bg-slate-200/40 rounded-lg transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Shield className="w-3.5 h-3.5 text-indigo-500" />
+                    Keamanan & Sistem
+                  </span>
+                  <ChevronRight className={`w-3 h-3 transition-transform duration-200 ${openGroups.sistem ? 'rotate-90 text-slate-600' : 'text-slate-400'}`} />
+                </button>
+                
+                {openGroups.sistem && (
+                  <div className="flex flex-col gap-1 pl-2 mt-1 border-l border-slate-200 ml-2">
+                    <button
+                      onClick={() => setActiveTab('permissions')}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-xl transition-all ${
+                        activeTab === 'permissions' 
+                          ? 'bg-indigo-600 text-white shadow-sm font-bold' 
+                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
+                      }`}
+                    >
+                      <Shield className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'permissions' ? 'text-white' : 'text-slate-400'}`} />
+                      <span className="truncate">Hak Akses Menu</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1286,16 +1411,20 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                                             </button>
                                           </div>
                                         ) : (
-                                          <button
-                                            onClick={() => {
-                                              setEditingStudentId(stud.id);
-                                              setTempPembimbingId(stud.id_pembimbing || '');
-                                              setTempInstansiId(stud.id_instansi || '');
-                                            }}
-                                            className="text-xs text-indigo-600 hover:underline font-semibold"
-                                          >
-                                            Plot Siswa
-                                          </button>
+                                          !isMonitoringOnly ? (
+                                            <button
+                                              onClick={() => {
+                                                setEditingStudentId(stud.id);
+                                                setTempPembimbingId(stud.id_pembimbing || '');
+                                                setTempInstansiId(stud.id_instansi || '');
+                                              }}
+                                              className="text-xs text-indigo-600 hover:underline font-semibold"
+                                            >
+                                              Plot Siswa
+                                            </button>
+                                          ) : (
+                                            <span className="text-[11px] text-slate-400 italic">No Akses</span>
+                                          )
                                         )}
                                       </td>
                                     </tr>
@@ -1398,55 +1527,65 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                   </div>
 
                   {/* Upload Card */}
-                  <div className="flex flex-col space-y-2">
-                    <div 
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        setIsDragOver(true);
-                      }}
-                      onDragLeave={() => setIsDragOver(false)}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        setIsDragOver(false);
-                        const file = e.dataTransfer.files?.[0];
-                        if (file) {
-                          setImportStatus(null);
-                          processExcelFile(file);
-                        }
-                      }}
-                      className={`relative p-4 rounded-xl border-2 border-dashed transition-all flex flex-col items-center justify-center text-center cursor-pointer min-h-[110px] ${
-                        isDragOver 
-                          ? 'border-indigo-500 bg-indigo-50/30' 
-                          : 'border-slate-200 bg-white hover:border-slate-300'
-                      }`}
-                    >
-                      <input
-                        type="file"
-                        accept=".xlsx, .xls"
-                        onChange={handleUploadExcel}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        title=""
-                      />
-                      <UploadCloud className={`w-7 h-7 mb-1.5 transition-transform ${isDragOver ? 'scale-110 text-indigo-600' : 'text-slate-400'}`} />
-                      <p className="text-xs font-bold text-slate-700">2. Unggah File Excel</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">Tarik & letakkan file .xlsx di sini atau klik untuk mencari</p>
+                  {isMonitoringOnly ? (
+                    <div className="p-4 rounded-xl border border-amber-100 bg-amber-50/20 flex flex-col justify-center items-center text-center space-y-2">
+                      <Shield className="w-8 h-8 text-amber-500 opacity-80" />
+                      <h4 className="text-xs font-bold text-slate-700">Fitur Impor Dinonaktifkan</h4>
+                      <p className="text-[10px] text-slate-500 leading-relaxed max-w-xs">
+                        Pengunggahan atau modifikasi data siswa secara massal dinonaktifkan dalam mode monitoring Panitia PKL.
+                      </p>
                     </div>
-
-                    {importStatus && (
-                      <div className={`p-2.5 rounded-lg text-[11px] font-semibold flex items-start gap-1.5 border ${
-                        importStatus.success 
-                          ? 'bg-emerald-50 border-emerald-100 text-emerald-800' 
-                          : 'bg-rose-50 border-rose-100 text-rose-800'
-                      }`}>
-                        {importStatus.success ? (
-                          <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                        ) : (
-                          <X className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
-                        )}
-                        <span>{importStatus.success || importStatus.error}</span>
+                  ) : (
+                    <div className="flex flex-col space-y-2">
+                      <div 
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setIsDragOver(true);
+                        }}
+                        onDragLeave={() => setIsDragOver(false)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setIsDragOver(false);
+                          const file = e.dataTransfer.files?.[0];
+                          if (file) {
+                            setImportStatus(null);
+                            processExcelFile(file);
+                          }
+                        }}
+                        className={`relative p-4 rounded-xl border-2 border-dashed transition-all flex flex-col items-center justify-center text-center cursor-pointer min-h-[110px] ${
+                          isDragOver 
+                            ? 'border-indigo-500 bg-indigo-50/30' 
+                            : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}
+                      >
+                        <input
+                          type="file"
+                          accept=".xlsx, .xls"
+                          onChange={handleUploadExcel}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                          title=""
+                        />
+                        <UploadCloud className={`w-7 h-7 mb-1.5 transition-transform ${isDragOver ? 'scale-110 text-indigo-600' : 'text-slate-400'}`} />
+                        <p className="text-xs font-bold text-slate-700">2. Unggah File Excel</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Tarik & letakkan file .xlsx di sini atau klik untuk mencari</p>
                       </div>
-                    )}
-                  </div>
+
+                      {importStatus && (
+                        <div className={`p-2.5 rounded-lg text-[11px] font-semibold flex items-start gap-1.5 border ${
+                          importStatus.success 
+                            ? 'bg-emerald-50 border-emerald-100 text-emerald-800' 
+                            : 'bg-rose-50 border-rose-100 text-rose-800'
+                        }`}>
+                          {importStatus.success ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                          ) : (
+                            <X className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
+                          )}
+                          <span>{importStatus.success || importStatus.error}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Quick stats cards */}
@@ -1483,7 +1622,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                           <th className="py-3 px-4">Nama Lengkap</th>
                           <th className="py-3 px-4 w-32">Kelas</th>
                           <th className="py-3 px-4">Jurusan</th>
-                          <th className="py-3 px-4 rounded-r-lg text-right">Aksi</th>
+                          {!isMonitoringOnly && <th className="py-3 px-4 rounded-r-lg text-right">Aksi</th>}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-slate-600">
@@ -1596,31 +1735,33 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                                   <td className="py-3.5 px-4 text-slate-600 font-medium">
                                     {stud.jurusan || <span className="text-slate-300 italic">Belum diisi</span>}
                                   </td>
-                                  <td className="py-3.5 px-4 text-right">
-                                    <div className="flex items-center justify-end gap-1.5">
-                                      <button
-                                        onClick={() => {
-                                          setEditingStudentMasterId(stud.id);
-                                          setEditNama(stud.nama);
-                                          setEditNomorInduk(stud.nomor_induk);
-                                          setEditKelas(stud.kelas || '');
-                                          setEditJurusan(stud.jurusan || '');
-                                          setEditTelepon(stud.telepon || '');
-                                          setEditPassword(stud.password || 'password123');
-                                        }}
-                                        className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold hover:underline px-2 py-1 hover:bg-indigo-50/50 rounded-md transition-all"
-                                      >
-                                        Edit
-                                      </button>
-                                      <button
-                                        onClick={() => handleDeleteUser(stud.id)}
-                                        className="text-rose-600 hover:text-rose-800 p-1.5 rounded-lg hover:bg-rose-50 border border-transparent transition-all inline-flex"
-                                        title="Hapus Siswa"
-                                      >
-                                        <Trash2 className="w-4 h-4" />
-                                      </button>
-                                    </div>
-                                  </td>
+                                  {!isMonitoringOnly && (
+                                    <td className="py-3.5 px-4 text-right">
+                                      <div className="flex items-center justify-end gap-1.5">
+                                        <button
+                                          onClick={() => {
+                                            setEditingStudentMasterId(stud.id);
+                                            setEditNama(stud.nama);
+                                            setEditNomorInduk(stud.nomor_induk);
+                                            setEditKelas(stud.kelas || '');
+                                            setEditJurusan(stud.jurusan || '');
+                                            setEditTelepon(stud.telepon || '');
+                                            setEditPassword(stud.password || 'password123');
+                                          }}
+                                          className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold hover:underline px-2 py-1 hover:bg-indigo-50/50 rounded-md transition-all"
+                                        >
+                                          Edit
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteUser(stud.id)}
+                                          className="text-rose-600 hover:text-rose-800 p-1.5 rounded-lg hover:bg-rose-50 border border-transparent transition-all inline-flex"
+                                          title="Hapus Siswa"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  )}
                                 </>
                               )}
                             </tr>
@@ -1650,16 +1791,18 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                     <Download className="w-4 h-4 text-slate-500" />
                     Unduh Template Excel
                   </button>
-                  <label className="cursor-pointer px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold text-xs flex items-center gap-1.5 transition-all shadow-sm">
-                    <UploadCloud className="w-4 h-4" />
-                    Unggah Excel
-                    <input
-                      type="file"
-                      accept=".xlsx, .xls"
-                      onChange={handleUploadTeacherExcel}
-                      className="hidden"
-                    />
-                  </label>
+                  {!isMonitoringOnly && (
+                    <label className="cursor-pointer px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold text-xs flex items-center gap-1.5 transition-all shadow-sm">
+                      <UploadCloud className="w-4 h-4" />
+                      Unggah Excel
+                      <input
+                        type="file"
+                        accept=".xlsx, .xls"
+                        onChange={handleUploadTeacherExcel}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
                 </div>
               </div>
 
@@ -1697,30 +1840,32 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
               )}
 
               {/* DRAG AND DROP AREA */}
-              <div
-                onDragOver={(e) => { e.preventDefault(); setIsDragOverTeacher(true); }}
-                onDragLeave={() => setIsDragOverTeacher(false)}
-                onDrop={async (e) => {
-                  e.preventDefault();
-                  setIsDragOverTeacher(false);
-                  const file = e.dataTransfer.files?.[0];
-                  if (file) {
-                    setTeacherImportStatus(null);
-                    await processTeacherExcelFile(file);
-                  }
-                }}
-                className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all mb-6 ${
-                  isDragOverTeacher 
-                    ? 'border-indigo-500 bg-indigo-50/30' 
-                    : 'border-slate-200 bg-slate-50/20 hover:bg-slate-50/50'
-                }`}
-              >
-                <div className="flex flex-col items-center gap-2">
-                  <FileSpreadsheet className="w-8 h-8 text-indigo-500" />
-                  <p className="text-xs font-semibold text-slate-700">Tarik & Lepas File Excel Guru di sini</p>
-                  <p className="text-[10px] text-slate-400">Mendukung format .xlsx atau .xls dengan struktur NIP/NIK, Nama Lengkap, Telepon</p>
+              {!isMonitoringOnly && (
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setIsDragOverTeacher(true); }}
+                  onDragLeave={() => setIsDragOverTeacher(false)}
+                  onDrop={async (e) => {
+                    e.preventDefault();
+                    setIsDragOverTeacher(false);
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) {
+                      setTeacherImportStatus(null);
+                      await processTeacherExcelFile(file);
+                    }
+                  }}
+                  className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all mb-6 ${
+                    isDragOverTeacher 
+                      ? 'border-indigo-500 bg-indigo-50/30' 
+                      : 'border-slate-200 bg-slate-50/20 hover:bg-slate-50/50'
+                  }`}
+                >
+                  <div className="flex flex-col items-center gap-2">
+                    <FileSpreadsheet className="w-8 h-8 text-indigo-500" />
+                    <p className="text-xs font-semibold text-slate-700">Tarik & Lepas File Excel Guru di sini</p>
+                    <p className="text-[10px] text-slate-400">Mendukung format .xlsx atau .xls dengan struktur NIP/NIK, Nama Lengkap, Telepon</p>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* STATISTICS GRID */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
@@ -1749,7 +1894,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                           <th className="py-3 px-4 w-40">NIP / NIK</th>
                           <th className="py-3 px-4">Nama & Informasi Akun</th>
                           <th className="py-3 px-4 w-40 text-center">Bimbingan Siswa</th>
-                          <th className="py-3 px-4 text-right w-36">Aksi</th>
+                          {!isMonitoringOnly && <th className="py-3 px-4 text-right w-36">Aksi</th>}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-slate-600">
@@ -1847,29 +1992,31 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                                       {bimbinganCount} Siswa
                                     </span>
                                   </td>
-                                  <td className="py-3.5 px-4 text-right">
-                                    <div className="flex items-center justify-end gap-1.5">
-                                      <button
-                                        onClick={() => {
-                                          setEditingTeacherMasterId(teacher.id);
-                                          setEditNama(teacher.nama);
-                                          setEditNomorInduk(teacher.nomor_induk);
-                                          setEditTelepon(teacher.telepon || '');
-                                          setEditPassword(teacher.password || 'password123');
-                                        }}
-                                        className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold hover:underline px-2 py-1 hover:bg-indigo-50/50 rounded-md transition-all"
-                                      >
-                                        Edit
-                                      </button>
-                                      <button
-                                        onClick={() => handleDeleteUser(teacher.id)}
-                                        className="text-rose-600 hover:text-rose-800 p-1.5 rounded-lg hover:bg-rose-50 border border-transparent transition-all inline-flex"
-                                        title="Hapus Guru"
-                                      >
-                                        <Trash2 className="w-4 h-4" />
-                                      </button>
-                                    </div>
-                                  </td>
+                                  {!isMonitoringOnly && (
+                                    <td className="py-3.5 px-4 text-right">
+                                      <div className="flex items-center justify-end gap-1.5">
+                                        <button
+                                          onClick={() => {
+                                            setEditingTeacherMasterId(teacher.id);
+                                            setEditNama(teacher.nama);
+                                            setEditNomorInduk(teacher.nomor_induk);
+                                            setEditTelepon(teacher.telepon || '');
+                                            setEditPassword(teacher.password || 'password123');
+                                          }}
+                                          className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold hover:underline px-2 py-1 hover:bg-indigo-50/50 rounded-md transition-all"
+                                        >
+                                          Edit
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteUser(teacher.id)}
+                                          className="text-rose-600 hover:text-rose-800 p-1.5 rounded-lg hover:bg-rose-50 border border-transparent transition-all inline-flex"
+                                          title="Hapus Guru"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  )}
                                 </>
                               )}
                             </tr>
@@ -1902,7 +2049,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                       <th className="pb-3 px-4">Nomor Induk</th>
                       <th className="pb-3 px-4">No Telepon</th>
                       <th className="pb-3 px-4">Sandi Login</th>
-                      <th className="pb-3 pl-4 text-right">Aksi</th>
+                      {!isMonitoringOnly && <th className="pb-3 pl-4 text-right">Aksi</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-600">
@@ -2034,36 +2181,38 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                               <td className="py-3 px-4 font-mono text-[11px] text-slate-500">
                                 {user.password || <span className="text-slate-300 italic">password123</span>}
                               </td>
-                              <td className="py-3 pl-4 text-right">
-                                <div className="flex items-center justify-end gap-1.5">
-                                  <button
-                                    onClick={() => {
-                                      setEditingUserId(user.id);
-                                      setEditNama(user.nama);
-                                      setEditRole(user.role);
-                                      setEditNomorInduk(user.nomor_induk);
-                                      setEditTelepon(user.telepon);
-                                      setEditPassword(user.password || 'password123');
-                                      setEditKelas(user.kelas || '');
-                                      setEditJurusan(user.jurusan || '');
-                                      setEditIdInstansi(user.id_instansi || '');
-                                      setEditIdPembimbing(user.id_pembimbing || '');
-                                    }}
-                                    className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold hover:underline px-2 py-1 hover:bg-indigo-50/50 rounded-md transition-all"
-                                  >
-                                    Edit
-                                  </button>
-                                  {user.email !== admin.email && (
+                              {!isMonitoringOnly && (
+                                <td className="py-3 pl-4 text-right">
+                                  <div className="flex items-center justify-end gap-1.5">
                                     <button
-                                      onClick={() => handleDeleteUser(user.id)}
-                                      className="text-rose-600 hover:text-rose-800 p-1.5 rounded-lg hover:bg-rose-50 border border-transparent transition-all inline-flex"
-                                      title="Hapus Pengguna"
+                                      onClick={() => {
+                                        setEditingUserId(user.id);
+                                        setEditNama(user.nama);
+                                        setEditRole(user.role);
+                                        setEditNomorInduk(user.nomor_induk);
+                                        setEditTelepon(user.telepon);
+                                        setEditPassword(user.password || 'password123');
+                                        setEditKelas(user.kelas || '');
+                                        setEditJurusan(user.jurusan || '');
+                                        setEditIdInstansi(user.id_instansi || '');
+                                        setEditIdPembimbing(user.id_pembimbing || '');
+                                      }}
+                                      className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold hover:underline px-2 py-1 hover:bg-indigo-50/50 rounded-md transition-all"
                                     >
-                                      <Trash2 className="w-4 h-4" />
+                                      Edit
                                     </button>
-                                  )}
-                                </div>
-                              </td>
+                                    {user.email !== admin.email && (
+                                      <button
+                                        onClick={() => handleDeleteUser(user.id)}
+                                        className="text-rose-600 hover:text-rose-800 p-1.5 rounded-lg hover:bg-rose-50 border border-transparent transition-all inline-flex"
+                                        title="Hapus Pengguna"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              )}
                             </>
                           )}
                         </tr>
@@ -2100,13 +2249,31 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                         )}
                       </div>
 
-                      <button
-                        onClick={() => handleDeleteInstansi(inst.id)}
-                        className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg hover:text-rose-700 transition-all border border-transparent hover:border-rose-100 shrink-0 self-start"
-                        title="Hapus Instansi"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {!isMonitoringOnly && (
+                        <div className="flex flex-col gap-1.5 shrink-0 justify-start items-end">
+                          <button
+                            onClick={() => {
+                              setEditingInstansiId(inst.id);
+                              setInstNama(inst.nama_instansi);
+                              setInstAlamat(inst.alamat);
+                              setInstKuota(inst.kuota);
+                              setInstPembimbingNama(inst.pembimbing_nama || '');
+                              setInstPembimbingTelp(inst.pembimbing_telp || '');
+                            }}
+                            className="p-2 text-indigo-500 hover:bg-indigo-50 rounded-lg hover:text-indigo-700 transition-all border border-transparent hover:border-indigo-100"
+                            title="Edit Instansi"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteInstansi(inst.id)}
+                            className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg hover:text-rose-700 transition-all border border-transparent hover:border-rose-100"
+                            title="Hapus Instansi"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -2189,7 +2356,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                       <th className="pb-3 pr-4">Nama Kelas</th>
                       <th className="pb-3 px-4">Jurusan / Kompetensi Keahlian</th>
                       <th className="pb-3 px-4 text-center">Jumlah Siswa</th>
-                      <th className="pb-3 pl-4 text-right">Aksi</th>
+                      {!isMonitoringOnly && <th className="pb-3 pl-4 text-right">Aksi</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50 text-slate-600">
@@ -2213,27 +2380,29 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                             <td className="py-3 px-4 text-center font-semibold text-indigo-600">
                               {studentCount} Siswa
                             </td>
-                            <td className="py-3 pl-4 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                <button
-                                  onClick={() => {
-                                    setEditingClassId(cls.id);
-                                    setClsNamaKelas(cls.nama_kelas);
-                                    setClsJurusan(cls.jurusan);
-                                  }}
-                                  className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold hover:underline px-2 py-1 hover:bg-indigo-50/50 rounded-md transition-all"
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteClass(cls.id, cls.nama_kelas)}
-                                  className="text-rose-600 hover:text-rose-800 p-1.5 rounded-lg hover:bg-rose-50 border border-transparent transition-all inline-flex"
-                                  title="Hapus Kelas"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </td>
+                            {!isMonitoringOnly && (
+                              <td className="py-3 pl-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    onClick={() => {
+                                      setEditingClassId(cls.id);
+                                      setClsNamaKelas(cls.nama_kelas);
+                                      setClsJurusan(cls.jurusan);
+                                    }}
+                                    className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold hover:underline px-2 py-1 hover:bg-indigo-50/50 rounded-md transition-all"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteClass(cls.id, cls.nama_kelas)}
+                                    className="text-rose-600 hover:text-rose-800 p-1.5 rounded-lg hover:bg-rose-50 border border-transparent transition-all inline-flex"
+                                    title="Hapus Kelas"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            )}
                           </tr>
                         );
                       })
@@ -2296,7 +2465,8 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                                   id={`perm-siswa-${menu.id}`}
                                   checked={menu.allowed_roles.includes('siswa')}
                                   onChange={() => handleTogglePermission(menu.id, 'siswa')}
-                                  className="w-4.5 h-4.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer transition-all"
+                                  disabled={isMonitoringOnly}
+                                  className="w-4.5 h-4.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer transition-all disabled:opacity-50"
                                 />
                               </td>
                               <td className="py-4 px-4 text-center">
@@ -2305,7 +2475,8 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                                   id={`perm-guru-${menu.id}`}
                                   checked={menu.allowed_roles.includes('guru')}
                                   onChange={() => handleTogglePermission(menu.id, 'guru')}
-                                  className="w-4.5 h-4.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer transition-all"
+                                  disabled={isMonitoringOnly}
+                                  className="w-4.5 h-4.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer transition-all disabled:opacity-50"
                                 />
                               </td>
                               <td className="py-4 px-4 text-center">
@@ -2314,7 +2485,8 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                                   id={`perm-industri-${menu.id}`}
                                   checked={menu.allowed_roles.includes('industri')}
                                   onChange={() => handleTogglePermission(menu.id, 'industri')}
-                                  className="w-4.5 h-4.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer transition-all"
+                                  disabled={isMonitoringOnly}
+                                  className="w-4.5 h-4.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer transition-all disabled:opacity-50"
                                 />
                               </td>
                               <td className="py-4 px-4 text-center">
@@ -2323,7 +2495,8 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                                   id={`perm-admin-${menu.id}`}
                                   checked={menu.allowed_roles.includes('admin')}
                                   onChange={() => handleTogglePermission(menu.id, 'admin')}
-                                  className="w-4.5 h-4.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer transition-all"
+                                  disabled={isMonitoringOnly}
+                                  className="w-4.5 h-4.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer transition-all disabled:opacity-50"
                                 />
                               </td>
                             </tr>
@@ -2431,8 +2604,39 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
             {/* RIGHT COLUMN: ACTION FORMS (USER ADD, INSTANSI ADD, ANNOUNCEMENTS) */}
             {['students', 'teachers', 'users', 'companies', 'classes', 'permissions'].includes(activeTab) && (
               <div className="xl:col-span-4 space-y-8">
-          
-          {/* PERMISSIONS INFO PANEL */}
+                {isMonitoringOnly ? (
+                  <div className="bg-gradient-to-br from-amber-50 to-orange-50/30 border border-amber-100 rounded-2xl shadow-xs p-6 space-y-4">
+                    <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2 border-b border-amber-100/50 pb-3">
+                      <Shield className="w-4.5 h-4.5 text-amber-500 animate-pulse" /> Panel Monitoring Panitia
+                    </h4>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Anda terdaftar sebagai anggota <span className="font-semibold text-slate-800">Panitia PKL</span>. Untuk menjaga integritas database dan data penempatan siswa, hak modifikasi data dinonaktifkan secara otomatis.
+                    </p>
+                    
+                    <div className="space-y-3 pt-2 text-xs">
+                      <div className="p-3.5 bg-white border border-amber-100/60 rounded-xl space-y-1">
+                        <strong className="text-amber-800 font-extrabold block">Modus Operasional</strong>
+                        <p className="text-slate-500">Read-Only / Hanya Tinjauan (Monitoring)</p>
+                      </div>
+                      
+                      <div className="p-3.5 bg-white border border-amber-100/60 rounded-xl space-y-1.5">
+                        <strong className="text-amber-800 font-extrabold block">Fungsionalitas yang Tersedia</strong>
+                        <ul className="space-y-1 text-slate-500 font-medium list-disc list-inside">
+                          <li>Melihat seluruh plotting & penempatan</li>
+                          <li>Melakukan filter & pencarian data</li>
+                          <li>Unduh Laporan Rekapitulasi Nilai</li>
+                          <li>Unduh Template berkas PKL</li>
+                        </ul>
+                      </div>
+
+                      <div className="p-3.5 bg-amber-500/10 text-amber-800 border border-amber-500/20 rounded-xl leading-relaxed">
+                        Jika terdapat kesalahan data atau memerlukan penambahan siswa/guru/instansi baru, harap berkoordinasi dengan <strong>Super Admin</strong> / Koordinator PKL.
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* PERMISSIONS INFO PANEL */}
           {activeTab === 'permissions' && (
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-4" id="permissions-sidebar">
               <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3">
@@ -2613,10 +2817,18 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
           {activeTab === 'companies' && (
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4">
               <h4 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
-                <Plus className="w-4 h-4 text-emerald-600" /> Tambah Mitra Instansi
+                {editingInstansiId ? (
+                  <>
+                    <Edit className="w-4 h-4 text-indigo-600" /> Edit Mitra Instansi
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 text-emerald-600" /> Tambah Mitra Instansi
+                  </>
+                )}
               </h4>
 
-              <form onSubmit={handleAddInstansi} className="space-y-3.5 text-xs">
+              <form onSubmit={handleSaveInstansi} className="space-y-3.5 text-xs">
                 <div>
                   <label className="block font-semibold text-slate-500 mb-1">Nama Instansi / Perusahaan</label>
                   <input
@@ -2675,12 +2887,30 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                   />
                 </div>
 
-                <button
-                  type="submit"
-                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-all"
-                >
-                  Tambahkan Instansi
-                </button>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="submit"
+                    className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-all"
+                  >
+                    {editingInstansiId ? 'Simpan Perubahan' : 'Tambahkan Instansi'}
+                  </button>
+                  {editingInstansiId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingInstansiId(null);
+                        setInstNama('');
+                        setInstAlamat('');
+                        setInstKuota(1);
+                        setInstPembimbingNama('');
+                        setInstPembimbingTelp('');
+                      }}
+                      className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-lg transition-all"
+                    >
+                      Batal
+                    </button>
+                  )}
+                </div>
 
                 {instSuccess && <p className="text-[10px] text-emerald-600 font-semibold">{instSuccess}</p>}
               </form>
@@ -2745,7 +2975,8 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
               </form>
             </div>
           )}
-
+                  </>
+                )}
               </div>
             )}
 

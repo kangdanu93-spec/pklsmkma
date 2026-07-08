@@ -16,7 +16,6 @@ import { isSupabaseConnected, getSupabaseConfig, getSupabaseClient, syncSupabase
 
 // Dashboards & Login
 import { Login } from './components/Login';
-import SupabaseConfig from './components/SupabaseConfig';
 import StudentDashboard from './components/StudentDashboard';
 import TeacherDashboard from './components/TeacherDashboard';
 import IndustryDashboard from './components/IndustryDashboard';
@@ -36,7 +35,7 @@ export default function App() {
   
   // Loading & UI control
   const [globalLoading, setGlobalLoading] = useState(true);
-  const [activeMenu, setActiveMenu] = useState<'dashboard' | 'stats' | 'supabase'>('dashboard');
+  const [activeMenu, setActiveMenu] = useState<'dashboard' | 'stats'>('dashboard');
   const [currentUser, setCurrentUser] = useState<PklUser | null>(null);
   const [isDbConnected, setIsDbConnected] = useState(false);
   const [sbDetails, setSbDetails] = useState<{ url: string } | null>(null);
@@ -196,7 +195,10 @@ export default function App() {
                 {isSuperAdmin(currentUser) && (
                   <span className="text-[10px] bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded border border-red-200 uppercase tracking-wider animate-pulse">Super Admin</span>
                 )}
-                {!isSuperAdmin(currentUser) && (
+                {currentUser?.role === 'admin' && !isSuperAdmin(currentUser) && (
+                  <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded border border-amber-200 uppercase tracking-wider">Panitia PKL (Monitoring Only)</span>
+                )}
+                {currentUser?.role !== 'admin' && !isSuperAdmin(currentUser) && (
                   <span className="text-xs bg-indigo-50 text-indigo-700 font-semibold px-2 py-0.5 rounded border border-indigo-100">v1.2</span>
                 )}
               </h1>
@@ -227,16 +229,6 @@ export default function App() {
                   <BarChart3 className="w-4 h-4" /> Statistik & Hasil
                 </button>
               )}
-              {isSuperAdmin(currentUser) && (
-                <button
-                  onClick={() => setActiveMenu('supabase')}
-                  className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                    activeMenu === 'supabase' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:bg-slate-50'
-                  }`}
-                >
-                  <Database className="w-4 h-4" /> Setup Supabase
-                </button>
-              )}
             </nav>
 
             {currentUser && (
@@ -245,7 +237,9 @@ export default function App() {
                 <div className="flex items-center gap-3">
                   <div className="text-right leading-none">
                     <span className="text-xs font-bold text-slate-800 block">{currentUser.nama}</span>
-                    <span className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider block mt-0.5">{currentUser.role}</span>
+                    <span className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider block mt-0.5">
+                      {isSuperAdmin(currentUser) ? 'Super Admin' : currentUser.email === 'panitia@simpkl.com' ? 'Panitia PKL' : currentUser.role}
+                    </span>
                   </div>
                   <button
                     onClick={handleLogout}
@@ -264,9 +258,7 @@ export default function App() {
       <main className="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
         {/* TAB SWITCHER */}
-        {activeMenu === 'supabase' ? (
-          <SupabaseConfig onConfigChanged={handleConfigChanged} />
-        ) : !currentUser ? (
+        {!currentUser ? (
           <Login users={users} onLoginSuccess={(u) => handleUserSessionSwitch(u.id)} />
         ) : activeMenu === 'stats' ? (
           <div className="space-y-6">
