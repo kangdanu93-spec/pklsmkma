@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Database, CheckCircle2, AlertTriangle, Copy, Check, RefreshCw, HelpCircle, Key, Link } from 'lucide-react';
-import { getSupabaseConfig, saveSupabaseConfig, isSupabaseConnected } from '../supabaseClient';
+import { getSupabaseConfig, saveSupabaseConfig, isSupabaseConnected, getSupabaseClient } from '../supabaseClient';
 import { SUPABASE_SQL_SCHEMA, syncLocalDataToSupabase } from '../utils/localDb';
 
 interface SupabaseConfigProps {
@@ -14,6 +14,8 @@ export default function SupabaseConfig({ onConfigChanged }: SupabaseConfigProps)
   const [copied, setCopied] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{ type: 'idle' | 'loading' | 'success' | 'error', message: string }>({ type: 'idle', message: '' });
   const [showSql, setShowSql] = useState(false);
+  const [diagStatus, setDiagStatus] = useState<'idle' | 'testing' | 'done'>('idle');
+  const [diagResults, setDiagResults] = useState<Array<{ table: string, status: 'ok' | 'rls_blocked' | 'missing' | 'error', details: string }>>([]);
 
   useEffect(() => {
     const config = getSupabaseConfig();
@@ -23,6 +25,114 @@ export default function SupabaseConfig({ onConfigChanged }: SupabaseConfigProps)
     }
     setIsConnected(isSupabaseConnected());
   }, []);
+
+  const handleDiagnose = async () => {
+    setDiagStatus('testing');
+    const sb = getSupabaseClient();
+    if (!sb) {
+      alert('Koneksi Supabase belum aktif atau terkonfigurasi!');
+      setDiagStatus('idle');
+      return;
+    }
+
+    const tables = [
+      { name: 'pkl_instansi', displayName: 'Daftar Instansi (pkl_instansi)' },
+      { name: 'pkl_users', displayName: 'Data Pengguna (pkl_users)' },
+      { name: 'pkl_placements', displayName: 'Penempatan PKL (pkl_placements)' },
+      { name: 'pkl_journals', displayName: 'Jurnal Kegiatan (pkl_journals)' },
+      { name: 'pkl_attendance', displayName: 'Presensi Kehadiran (pkl_attendance)' },
+      { name: 'pkl_evaluations', displayName: 'Nilai & Evaluasi (pkl_evaluations)' },
+      { name: 'pkl_announcements', displayName: 'Pengumuman (pkl_announcements)' },
+      { name: 'pkl_classes', displayName: 'Master Kelas (pkl_classes)' }
+    ];
+
+    const results: Array<{ table: string, status: 'ok' | 'rls_blocked' | 'missing' | 'error', details: string }> = [];
+
+    for (const t of tables) {
+      try {
+        const { data, error: selectError } = await sb.from(t.name).select('*').limit(1);
+        
+        if (selectError) {
+          if (selectError.code === '42P01' || selectError.message?.includes('relation') || selectError.message?.includes('does not exist')) {
+            results.push({
+              table: t.displayName,
+              status: 'missing',
+              details: `Tabel belum dibuat di database Anda. Silakan jalankan SQL schema di sebelah kanan.`
+            });
+            continue;
+          } else if (selectError.code === '42501') {
+            results.push({
+              table: t.displayName,
+              status: 'rls_blocked',
+              details: `Row Level Security (RLS) aktif dan memblokir akses baca (SELECT).`
+            });
+            continue;
+          } else {
+            results.push({
+              table: t.displayName,
+              status: 'error',
+              details: `Gagal membaca tabel: ${selectError.message}`
+            });
+            continue;
+          }
+        }
+
+        const fakeId = '00000000-0000-0000-0000-000000000000';
+        let writeError: any = null;
+        
+        if (t.name === 'pkl_classes') {
+          const { error } = await sb.from('pkl_classes').insert({ id: fakeId, nama_kelas: 'DIAG_TEMP_CLASS', jurusan: 'DIAG' });
+          writeError = error;
+          if (!error) {
+            await sb.from('pkl_classes').delete().eq('id', fakeId);
+          }
+        } else if (t.name === 'pkl_instansi') {
+          const { error } = await sb.from('pkl_instansi').insert({ id: fakeId, nama_instansi: 'DIAG_TEMP', alamat: 'DIAG', kuota: 1 });
+          writeError = error;
+          if (!error) {
+            await sb.from('pkl_instansi').delete().eq('id', fakeId);
+          }
+        } else {
+          // General write test fallback
+          const { error } = await sb.from(t.name).insert({ id: fakeId }).select();
+          if (error) {
+            writeError = error;
+          } else {
+            await sb.from(t.name).delete().eq('id', fakeId);
+          }
+        }
+
+        if (writeError && (writeError.code === '42501' || writeError.message?.includes('policy') || writeError.message?.includes('row-level security'))) {
+          results.push({
+            table: t.displayName,
+            status: 'rls_blocked',
+            details: `Akses tulis (INSERT/UPSERT) diblokir oleh kebijakan Row Level Security (RLS).`
+          });
+        } else if (writeError && (writeError.code === '42P01' || writeError.message?.includes('relation') || writeError.message?.includes('does not exist'))) {
+          results.push({
+            table: t.displayName,
+            status: 'missing',
+            details: `Tabel belum dibuat di database Anda.`
+          });
+        } else {
+          results.push({
+            table: t.displayName,
+            status: 'ok',
+            details: `Tabel siap digunakan. Koneksi baca & tulis berjalan lancar.`
+          });
+        }
+      } catch (err: any) {
+        results.push({
+          table: t.displayName,
+          status: 'error',
+          details: `Error: ${err?.message || String(err)}`
+        });
+      }
+    }
+
+    setDiagResults(results);
+    setDiagStatus('done');
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,6 +264,16 @@ export default function SupabaseConfig({ onConfigChanged }: SupabaseConfigProps)
 
                   <button
                     type="button"
+                    onClick={handleDiagnose}
+                    disabled={diagStatus === 'testing'}
+                    className="px-5 py-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-sm font-medium transition-all flex items-center gap-1.5"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${diagStatus === 'testing' ? 'animate-spin' : ''}`} />
+                    Diagnosis RLS & Tabel
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={handleSync}
                     disabled={syncStatus.type === 'loading'}
                     className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white text-sm font-medium transition-all flex items-center gap-1.5 shadow-sm shadow-emerald-600/10"
@@ -165,6 +285,101 @@ export default function SupabaseConfig({ onConfigChanged }: SupabaseConfigProps)
               )}
             </div>
           </form>
+
+          {diagStatus !== 'idle' && (
+            <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-5 mt-4 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-200/50 pb-3">
+                <h4 className="font-semibold text-slate-800 text-sm flex items-center gap-2">
+                  <Database className="w-4 h-4 text-indigo-600" />
+                  Laporan Diagnosis Database & RLS
+                </h4>
+                {diagStatus === 'testing' ? (
+                  <span className="text-xs text-indigo-600 flex items-center gap-1.5 font-medium animate-pulse">
+                    <RefreshCw className="w-3 h-3 animate-spin" /> Sedang memeriksa tabel...
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleDiagnose}
+                    className="text-xs text-indigo-600 hover:underline font-semibold"
+                  >
+                    Uji Ulang
+                  </button>
+                )}
+              </div>
+
+              {diagStatus === 'testing' ? (
+                <div className="py-8 text-center text-slate-400 text-sm">
+                  Sedang menjalankan kueri pengujian pada semua tabel Supabase Anda...
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {diagResults.map((r, idx) => (
+                      <div key={idx} className="bg-white p-3.5 rounded-xl border border-slate-100 flex items-start gap-3">
+                        <div className="mt-0.5">
+                          {r.status === 'ok' ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                          ) : r.status === 'rls_blocked' ? (
+                            <AlertTriangle className="w-4 h-4 text-amber-500" />
+                          ) : (
+                            <AlertTriangle className="w-4 h-4 text-rose-500" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-slate-800 text-xs truncate">{r.table}</p>
+                          <p className={`text-[11px] mt-0.5 ${
+                            r.status === 'ok' ? 'text-emerald-600' :
+                            r.status === 'rls_blocked' ? 'text-amber-600' : 'text-rose-600'
+                          }`}>
+                            {r.details}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {diagResults.some(r => r.status === 'rls_blocked') && (
+                    <div className="bg-amber-50 border border-amber-200/50 p-4 rounded-xl space-y-2.5 text-xs text-amber-900 leading-relaxed mt-2">
+                      <p className="font-semibold flex items-center gap-1.5 text-amber-800">
+                        <AlertTriangle className="w-4 h-4" /> Masalah Row Level Security (RLS) Terdeteksi!
+                      </p>
+                      <p>
+                        Supabase mengaktifkan RLS secara default untuk melindungi data. Namun, untuk aplikasi demo ini agar dapat berjalan mandiri, RLS harus dinonaktifkan pada tabel-tabel di atas.
+                      </p>
+                      <p className="font-semibold text-amber-800">
+                        Solusi Mudah: Salin dan jalankan perintah SQL berikut di SQL Editor Supabase Anda:
+                      </p>
+                      <div className="bg-slate-900 text-amber-200 font-mono p-3 rounded-lg text-[11px] overflow-x-auto border border-slate-800 relative">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const sql = `ALTER TABLE pkl_instansi DISABLE ROW LEVEL SECURITY;\nALTER TABLE pkl_users DISABLE ROW LEVEL SECURITY;\nALTER TABLE pkl_placements DISABLE ROW LEVEL SECURITY;\nALTER TABLE pkl_journals DISABLE ROW LEVEL SECURITY;\nALTER TABLE pkl_attendance DISABLE ROW LEVEL SECURITY;\nALTER TABLE pkl_evaluations DISABLE ROW LEVEL SECURITY;\nALTER TABLE pkl_announcements DISABLE ROW LEVEL SECURITY;\nALTER TABLE pkl_classes DISABLE ROW LEVEL SECURITY;`;
+                            navigator.clipboard.writeText(sql);
+                            alert('Perintah SQL penonaktifan RLS berhasil disalin!');
+                          }}
+                          className="absolute top-2 right-2 px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-[10px]"
+                        >
+                          Salin SQL RLS
+                        </button>
+                        <pre>{`ALTER TABLE pkl_instansi DISABLE ROW LEVEL SECURITY;
+ALTER TABLE pkl_users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE pkl_placements DISABLE ROW LEVEL SECURITY;
+ALTER TABLE pkl_journals DISABLE ROW LEVEL SECURITY;
+ALTER TABLE pkl_attendance DISABLE ROW LEVEL SECURITY;
+ALTER TABLE pkl_evaluations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE pkl_announcements DISABLE ROW LEVEL SECURITY;
+ALTER TABLE pkl_classes DISABLE ROW LEVEL SECURITY;`}</pre>
+                      </div>
+                      <p className="text-[11px] text-amber-700">
+                        * Setelah menjalankan SQL di atas, silakan klik tombol <strong>"Uji Ulang"</strong> untuk memverifikasi koneksi database Anda.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {syncStatus.type !== 'idle' && (
             <div className={`p-4 rounded-xl text-sm border flex items-start gap-2.5 ${

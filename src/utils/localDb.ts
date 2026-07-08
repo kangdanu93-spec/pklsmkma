@@ -554,7 +554,7 @@ export async function dbGetUsers(): Promise<{ data: PklUser[], fromSupabase: boo
   return { data: localDb.get<PklUser>('SIM_PKL_USERS'), fromSupabase: false };
 }
 
-export async function dbSaveUser(user: PklUser): Promise<{ success: boolean, fromSupabase: boolean }> {
+export async function dbSaveUser(user: PklUser): Promise<{ success: boolean, fromSupabase: boolean, error?: string }> {
   // Map local mock instansi IDs to standard Supabase UUIDs
   if (user.id_instansi && INSTANSI_MAP[user.id_instansi]) {
     user.id_instansi = INSTANSI_MAP[user.id_instansi];
@@ -563,6 +563,7 @@ export async function dbSaveUser(user: PklUser): Promise<{ success: boolean, fro
   const sb = getSupabaseClient();
   let fromSupabase = false;
   let success = false;
+  let errorMsg = '';
 
   if (sb) {
     try {
@@ -593,9 +594,15 @@ export async function dbSaveUser(user: PklUser): Promise<{ success: boolean, fro
         }
       } else {
         console.warn('Supabase upsert user error:', error);
+        errorMsg = error.message;
+        if (error.code === '42501') {
+          errorMsg = 'Row Level Security (RLS) aktif pada tabel pkl_users. Silakan nonaktifkan RLS dengan perintah SQL: "ALTER TABLE pkl_users DISABLE ROW LEVEL SECURITY;"';
+        }
+        fromSupabase = true;
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Supabase user upsert failed:', e);
+      errorMsg = e?.message || String(e);
     }
   }
 
@@ -703,7 +710,7 @@ export async function dbGetInstansi(): Promise<{ data: PklInstansi[], fromSupaba
   return { data: localDb.get<PklInstansi>('SIM_PKL_INSTANSI'), fromSupabase: false };
 }
 
-export async function dbSaveInstansi(instansi: PklInstansi): Promise<{ success: boolean, data?: PklInstansi, fromSupabase: boolean }> {
+export async function dbSaveInstansi(instansi: PklInstansi): Promise<{ success: boolean, data?: PklInstansi, fromSupabase: boolean, error?: string }> {
   // Ensure the ID is a valid UUID before saving
   if (!isUuid(instansi.id)) {
     instansi.id = generateUUID();
@@ -713,19 +720,34 @@ export async function dbSaveInstansi(instansi: PklInstansi): Promise<{ success: 
   let fromSupabase = false;
   let success = false;
   let returnedData = instansi;
+  let errorMsg = '';
 
   if (sb) {
     try {
-      const { data, error } = await sb.from('pkl_instansi').upsert(instansi).select().single();
-      if (!error && data) {
+      const { data, error } = await sb.from('pkl_instansi').upsert(instansi).select();
+      if (!error && data && data.length > 0) {
         success = true;
         fromSupabase = true;
-        returnedData = data as PklInstansi;
+        returnedData = data[0] as PklInstansi;
       } else if (error) {
-        console.error('Supabase save instansi failed:', error.message, error.details, error.hint);
+        if (error.code === 'P0001' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
+          console.warn('Supabase table pkl_instansi not found, proceeding locally');
+        } else {
+          console.error('Supabase save instansi failed:', error.message, error.details, error.hint);
+          errorMsg = error.message;
+          if (error.code === '42501') {
+            errorMsg = 'Row Level Security (RLS) aktif pada tabel pkl_instansi. Silakan nonaktifkan RLS dengan perintah SQL: "ALTER TABLE pkl_instansi DISABLE ROW LEVEL SECURITY;"';
+          }
+          fromSupabase = true;
+        }
+      } else {
+        // Upsert succeeded but select returned empty, likely due to RLS read policy
+        success = true;
+        fromSupabase = true;
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Supabase save instansi threw exception:', e);
+      errorMsg = e?.message || String(e);
     }
   }
 
@@ -739,7 +761,7 @@ export async function dbSaveInstansi(instansi: PklInstansi): Promise<{ success: 
   localDb.set('SIM_PKL_INSTANSI', list);
 
   if (!fromSupabase) success = true;
-  return { success, data: returnedData, fromSupabase };
+  return { success, data: returnedData, fromSupabase, error: errorMsg };
 }
 
 export async function dbDeleteInstansi(id: string): Promise<{ success: boolean, fromSupabase: boolean }> {
@@ -779,7 +801,7 @@ export async function dbGetPlacements(): Promise<{ data: PklPlacement[], fromSup
   return { data: localDb.get<PklPlacement>('SIM_PKL_PLACEMENTS'), fromSupabase: false };
 }
 
-export async function dbSavePlacement(placement: PklPlacement): Promise<{ success: boolean, data?: PklPlacement, fromSupabase: boolean }> {
+export async function dbSavePlacement(placement: PklPlacement): Promise<{ success: boolean, data?: PklPlacement, fromSupabase: boolean, error?: string }> {
   // Ensure the ID is a valid UUID before saving
   if (!isUuid(placement.id)) {
     placement.id = generateUUID();
@@ -793,19 +815,33 @@ export async function dbSavePlacement(placement: PklPlacement): Promise<{ succes
   let fromSupabase = false;
   let success = false;
   let returnedData = placement;
+  let errorMsg = '';
 
   if (sb) {
     try {
-      const { data, error } = await sb.from('pkl_placements').upsert(placement).select().single();
-      if (!error && data) {
+      const { data, error } = await sb.from('pkl_placements').upsert(placement).select();
+      if (!error && data && data.length > 0) {
         success = true;
         fromSupabase = true;
-        returnedData = data as PklPlacement;
+        returnedData = data[0] as PklPlacement;
       } else if (error) {
-        console.error('Supabase save placement failed:', error.message);
+        if (error.code === 'P0001' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
+          console.warn('Supabase table pkl_placements not found, proceeding locally');
+        } else {
+          console.error('Supabase save placement failed:', error.message);
+          errorMsg = error.message;
+          if (error.code === '42501') {
+            errorMsg = 'Row Level Security (RLS) aktif pada tabel pkl_placements. Silakan nonaktifkan RLS dengan perintah SQL: "ALTER TABLE pkl_placements DISABLE ROW LEVEL SECURITY;"';
+          }
+          fromSupabase = true;
+        }
+      } else {
+        success = true;
+        fromSupabase = true;
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Supabase save placement threw exception:', e);
+      errorMsg = e?.message || String(e);
     }
   }
 
@@ -819,7 +855,7 @@ export async function dbSavePlacement(placement: PklPlacement): Promise<{ succes
   localDb.set('SIM_PKL_PLACEMENTS', list);
 
   if (!fromSupabase) success = true;
-  return { success, data: returnedData, fromSupabase };
+  return { success, data: returnedData, fromSupabase, error: errorMsg };
 }
 
 // ---------------------- JOURNALS ----------------------
@@ -837,7 +873,7 @@ export async function dbGetJournals(): Promise<{ data: PklJournal[], fromSupabas
   return { data: localDb.get<PklJournal>('SIM_PKL_JOURNALS'), fromSupabase: false };
 }
 
-export async function dbSaveJournal(journal: PklJournal): Promise<{ success: boolean, data?: PklJournal, fromSupabase: boolean }> {
+export async function dbSaveJournal(journal: PklJournal): Promise<{ success: boolean, data?: PklJournal, fromSupabase: boolean, error?: string }> {
   // Ensure the ID is a valid UUID before saving
   if (!isUuid(journal.id)) {
     journal.id = generateUUID();
@@ -847,19 +883,33 @@ export async function dbSaveJournal(journal: PklJournal): Promise<{ success: boo
   let fromSupabase = false;
   let success = false;
   let returnedData = journal;
+  let errorMsg = '';
 
   if (sb) {
     try {
-      const { data, error } = await sb.from('pkl_journals').upsert(journal).select().single();
-      if (!error && data) {
+      const { data, error } = await sb.from('pkl_journals').upsert(journal).select();
+      if (!error && data && data.length > 0) {
         success = true;
         fromSupabase = true;
-        returnedData = data as PklJournal;
+        returnedData = data[0] as PklJournal;
       } else if (error) {
-        console.error('Supabase save journal failed:', error.message);
+        if (error.code === 'P0001' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
+          console.warn('Supabase table pkl_journals not found, proceeding locally');
+        } else {
+          console.error('Supabase save journal failed:', error.message);
+          errorMsg = error.message;
+          if (error.code === '42501') {
+            errorMsg = 'Row Level Security (RLS) aktif pada tabel pkl_journals. Silakan nonaktifkan RLS dengan perintah SQL: "ALTER TABLE pkl_journals DISABLE ROW LEVEL SECURITY;"';
+          }
+          fromSupabase = true;
+        }
+      } else {
+        success = true;
+        fromSupabase = true;
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Supabase save journal threw exception:', e);
+      errorMsg = e?.message || String(e);
     }
   }
 
@@ -873,7 +923,7 @@ export async function dbSaveJournal(journal: PklJournal): Promise<{ success: boo
   localDb.set('SIM_PKL_JOURNALS', list);
 
   if (!fromSupabase) success = true;
-  return { success, data: returnedData, fromSupabase };
+  return { success, data: returnedData, fromSupabase, error: errorMsg };
 }
 
 export async function dbDeleteJournal(id: string): Promise<{ success: boolean, fromSupabase: boolean }> {
@@ -913,7 +963,7 @@ export async function dbGetAttendance(): Promise<{ data: PklAttendance[], fromSu
   return { data: localDb.get<PklAttendance>('SIM_PKL_ATTENDANCE'), fromSupabase: false };
 }
 
-export async function dbSaveAttendance(attendance: PklAttendance): Promise<{ success: boolean, data?: PklAttendance, fromSupabase: boolean }> {
+export async function dbSaveAttendance(attendance: PklAttendance): Promise<{ success: boolean, data?: PklAttendance, fromSupabase: boolean, error?: string }> {
   // Ensure the ID is a valid UUID before saving
   if (!isUuid(attendance.id)) {
     attendance.id = generateUUID();
@@ -923,19 +973,33 @@ export async function dbSaveAttendance(attendance: PklAttendance): Promise<{ suc
   let fromSupabase = false;
   let success = false;
   let returnedData = attendance;
+  let errorMsg = '';
 
   if (sb) {
     try {
-      const { data, error } = await sb.from('pkl_attendance').upsert(attendance).select().single();
-      if (!error && data) {
+      const { data, error } = await sb.from('pkl_attendance').upsert(attendance).select();
+      if (!error && data && data.length > 0) {
         success = true;
         fromSupabase = true;
-        returnedData = data as PklAttendance;
+        returnedData = data[0] as PklAttendance;
       } else if (error) {
-        console.error('Supabase save attendance failed:', error.message);
+        if (error.code === 'P0001' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
+          console.warn('Supabase table pkl_attendance not found, proceeding locally');
+        } else {
+          console.error('Supabase save attendance failed:', error.message);
+          errorMsg = error.message;
+          if (error.code === '42501') {
+            errorMsg = 'Row Level Security (RLS) aktif pada tabel pkl_attendance. Silakan nonaktifkan RLS dengan perintah SQL: "ALTER TABLE pkl_attendance DISABLE ROW LEVEL SECURITY;"';
+          }
+          fromSupabase = true;
+        }
+      } else {
+        success = true;
+        fromSupabase = true;
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Supabase save attendance threw exception:', e);
+      errorMsg = e?.message || String(e);
     }
   }
 
@@ -949,7 +1013,7 @@ export async function dbSaveAttendance(attendance: PklAttendance): Promise<{ suc
   localDb.set('SIM_PKL_ATTENDANCE', list);
 
   if (!fromSupabase) success = true;
-  return { success, data: returnedData, fromSupabase };
+  return { success, data: returnedData, fromSupabase, error: errorMsg };
 }
 
 // ---------------------- EVALUATIONS ----------------------
@@ -967,7 +1031,7 @@ export async function dbGetEvaluations(): Promise<{ data: PklEvaluation[], fromS
   return { data: localDb.get<PklEvaluation>('SIM_PKL_EVALUATIONS'), fromSupabase: false };
 }
 
-export async function dbSaveEvaluation(evaluation: PklEvaluation): Promise<{ success: boolean, data?: PklEvaluation, fromSupabase: boolean }> {
+export async function dbSaveEvaluation(evaluation: PklEvaluation): Promise<{ success: boolean, data?: PklEvaluation, fromSupabase: boolean, error?: string }> {
   // Ensure the ID is a valid UUID before saving
   if (!isUuid(evaluation.id)) {
     evaluation.id = generateUUID();
@@ -977,19 +1041,33 @@ export async function dbSaveEvaluation(evaluation: PklEvaluation): Promise<{ suc
   let fromSupabase = false;
   let success = false;
   let returnedData = evaluation;
+  let errorMsg = '';
 
   if (sb) {
     try {
-      const { data, error } = await sb.from('pkl_evaluations').upsert(evaluation).select().single();
-      if (!error && data) {
+      const { data, error } = await sb.from('pkl_evaluations').upsert(evaluation).select();
+      if (!error && data && data.length > 0) {
         success = true;
         fromSupabase = true;
-        returnedData = data as PklEvaluation;
+        returnedData = data[0] as PklEvaluation;
       } else if (error) {
-        console.error('Supabase save evaluation failed:', error.message);
+        if (error.code === 'P0001' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
+          console.warn('Supabase table pkl_evaluations not found, proceeding locally');
+        } else {
+          console.error('Supabase save evaluation failed:', error.message);
+          errorMsg = error.message;
+          if (error.code === '42501') {
+            errorMsg = 'Row Level Security (RLS) aktif pada tabel pkl_evaluations. Silakan nonaktifkan RLS dengan perintah SQL: "ALTER TABLE pkl_evaluations DISABLE ROW LEVEL SECURITY;"';
+          }
+          fromSupabase = true;
+        }
+      } else {
+        success = true;
+        fromSupabase = true;
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Supabase save evaluation threw exception:', e);
+      errorMsg = e?.message || String(e);
     }
   }
 
@@ -1003,7 +1081,7 @@ export async function dbSaveEvaluation(evaluation: PklEvaluation): Promise<{ suc
   localDb.set('SIM_PKL_EVALUATIONS', list);
 
   if (!fromSupabase) success = true;
-  return { success, data: returnedData, fromSupabase };
+  return { success, data: returnedData, fromSupabase, error: errorMsg };
 }
 
 // ---------------------- ANNOUNCEMENTS ----------------------
@@ -1021,7 +1099,7 @@ export async function dbGetAnnouncements(): Promise<{ data: Announcement[], from
   return { data: localDb.get<Announcement>('SIM_PKL_ANNOUNCEMENTS'), fromSupabase: false };
 }
 
-export async function dbSaveAnnouncement(announcement: Announcement): Promise<{ success: boolean, data?: Announcement, fromSupabase: boolean }> {
+export async function dbSaveAnnouncement(announcement: Announcement): Promise<{ success: boolean, data?: Announcement, fromSupabase: boolean, error?: string }> {
   // Ensure the ID is a valid UUID before saving
   if (!isUuid(announcement.id)) {
     announcement.id = generateUUID();
@@ -1031,19 +1109,33 @@ export async function dbSaveAnnouncement(announcement: Announcement): Promise<{ 
   let fromSupabase = false;
   let success = false;
   let returnedData = announcement;
+  let errorMsg = '';
 
   if (sb) {
     try {
-      const { data, error } = await sb.from('pkl_announcements').upsert(announcement).select().single();
-      if (!error && data) {
+      const { data, error } = await sb.from('pkl_announcements').upsert(announcement).select();
+      if (!error && data && data.length > 0) {
         success = true;
         fromSupabase = true;
-        returnedData = data as Announcement;
+        returnedData = data[0] as Announcement;
       } else if (error) {
-        console.error('Supabase save announcement failed:', error.message);
+        if (error.code === 'P0001' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
+          console.warn('Supabase table pkl_announcements not found, proceeding locally');
+        } else {
+          console.error('Supabase save announcement failed:', error.message);
+          errorMsg = error.message;
+          if (error.code === '42501') {
+            errorMsg = 'Row Level Security (RLS) aktif pada tabel pkl_announcements. Silakan nonaktifkan RLS dengan perintah SQL: "ALTER TABLE pkl_announcements DISABLE ROW LEVEL SECURITY;"';
+          }
+          fromSupabase = true;
+        }
+      } else {
+        success = true;
+        fromSupabase = true;
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Supabase save announcement threw exception:', e);
+      errorMsg = e?.message || String(e);
     }
   }
 
@@ -1242,19 +1334,25 @@ export async function dbSaveClass(cls: PklClass): Promise<{ success: boolean, da
 
   if (sb) {
     try {
-      const { data, error } = await sb.from('pkl_classes').upsert(cls).select().single();
-      if (!error && data) {
+      const { data, error } = await sb.from('pkl_classes').upsert(cls).select();
+      if (!error && data && data.length > 0) {
         success = true;
         fromSupabase = true;
-        returnedData = data as PklClass;
+        returnedData = data[0] as PklClass;
       } else if (error) {
         if (error.code === 'P0001' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
           console.warn('Supabase table pkl_classes not found, proceeding locally');
         } else {
           console.error('Supabase save class failed:', error);
           errorMsg = error.message;
+          if (error.code === '42501') {
+            errorMsg = 'Row Level Security (RLS) aktif pada tabel pkl_classes. Silakan nonaktifkan RLS dengan perintah SQL: "ALTER TABLE pkl_classes DISABLE ROW LEVEL SECURITY;"';
+          }
           fromSupabase = true;
         }
+      } else {
+        success = true;
+        fromSupabase = true;
       }
     } catch (e: any) {
       console.error('Supabase save class failed:', e);

@@ -620,6 +620,8 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
       fetchAdminData();
       onRefreshGlobalData();
       setTimeout(() => setInstSuccess(''), 4000);
+    } else {
+      alert(`Gagal menyimpan instansi ke database!\n\nDetail: ${res.error || 'Terjadi kesalahan sistem.'}`);
     }
   };
 
@@ -691,6 +693,8 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
         fetchAdminData();
         onRefreshGlobalData();
         alert('Penempatan Instansi PKL dan Guru pembimbing berhasil disimpan!');
+      } else {
+        alert(`Gagal menyimpan data penempatan ke database!\n\nDetail: ${res.error || 'Terjadi kesalahan sistem.'}`);
       }
     }
   };
@@ -719,6 +723,8 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
       fetchAdminData();
       onRefreshGlobalData();
       setTimeout(() => setAnnSuccess(''), 4000);
+    } else {
+      alert(`Gagal memposting pengumuman!\n\nDetail: ${res.error || 'Terjadi kesalahan sistem.'}`);
     }
   };
 
