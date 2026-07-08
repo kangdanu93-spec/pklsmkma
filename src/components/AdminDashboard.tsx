@@ -134,7 +134,25 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
   const [tempPembimbingId, setTempPembimbingId] = useState('');
   const [tempInstansiId, setTempInstansiId] = useState('');
   const [studentSearch, setStudentSearch] = useState('');
+  const [studentClassFilter, setStudentClassFilter] = useState('');
+  const [studentsPage, setStudentsPage] = useState(1);
+
   const [teacherSearch, setTeacherSearch] = useState('');
+  const [teachersPage, setTeachersPage] = useState(1);
+
+  const [companiesSearch, setCompaniesSearch] = useState('');
+  const [companiesPage, setCompaniesPage] = useState(1);
+
+  const [classesSearch, setClassesSearch] = useState('');
+  const [classesPage, setClassesPage] = useState(1);
+
+  const [usersSearch, setUsersSearch] = useState('');
+  const [usersRoleFilter, setUsersRoleFilter] = useState('');
+  const [usersPage, setUsersPage] = useState(1);
+
+  const [reportsSearch, setReportsSearch] = useState('');
+  const [reportsClassFilter, setReportsClassFilter] = useState('');
+  const [reportsPage, setReportsPage] = useState(1);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isDragOverTeacher, setIsDragOverTeacher] = useState(false);
   const [importStatus, setImportStatus] = useState<{ success?: string; error?: string } | null>(null);
@@ -876,10 +894,36 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
   const allStudents = users.filter(u => u.role === 'siswa');
   const filteredStudents = allStudents.filter(s => {
     const query = studentSearch.toLowerCase();
-    return s.nama.toLowerCase().includes(query) ||
+    const matchesQuery = s.nama.toLowerCase().includes(query) ||
            s.nomor_induk.toLowerCase().includes(query) ||
            (s.kelas && s.kelas.toLowerCase().includes(query)) ||
            (s.jurusan && s.jurusan.toLowerCase().includes(query));
+    const matchesClass = !studentClassFilter || s.kelas === studentClassFilter;
+    return matchesQuery && matchesClass;
+  });
+
+  const filteredCompanies = instansiList.filter(c => {
+    const query = companiesSearch.toLowerCase();
+    return c.nama_instansi.toLowerCase().includes(query) ||
+           c.alamat.toLowerCase().includes(query) ||
+           (c.pembimbing_nama && c.pembimbing_nama.toLowerCase().includes(query));
+  });
+
+  const filteredClasses = classesList.filter(c => {
+    const query = classesSearch.toLowerCase();
+    return c.nama_kelas.toLowerCase().includes(query) ||
+           c.jurusan.toLowerCase().includes(query);
+  });
+
+  const filteredUsers = users.filter(u => {
+    const query = usersSearch.toLowerCase();
+    const matchesQuery = u.nama.toLowerCase().includes(query) ||
+           u.email.toLowerCase().includes(query) ||
+           u.nomor_induk.toLowerCase().includes(query) ||
+           (u.kelas && u.kelas.toLowerCase().includes(query)) ||
+           (u.role && u.role.toLowerCase().includes(query));
+    const matchesRole = !usersRoleFilter || u.role === usersRoleFilter;
+    return matchesQuery && matchesRole;
   });
   const studentsCount = allStudents.length;
   const companiesCount = instansiList.length;
@@ -1494,13 +1538,31 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                   </div>
                   {/* Search and Filters */}
                   <div className="flex flex-wrap gap-2">
-                    <input
-                      type="text"
-                      placeholder="Cari nama, NISN, kelas..."
-                      className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-800 w-48 sm:w-64 shadow-sm"
-                      onChange={(e) => setStudentSearch(e.target.value)}
-                      value={studentSearch}
-                    />
+                    {/* Search Input */}
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                      <input
+                        type="text"
+                        placeholder="Cari nama, NISN, kelas..."
+                        className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-800 w-48 sm:w-64 shadow-sm"
+                        onChange={(e) => { setStudentSearch(e.target.value); setStudentsPage(1); }}
+                        value={studentSearch}
+                      />
+                    </div>
+                    {/* Class Dropdown */}
+                    <select
+                      value={studentClassFilter}
+                      onChange={(e) => {
+                        setStudentClassFilter(e.target.value);
+                        setStudentsPage(1);
+                      }}
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none bg-white text-slate-700 shadow-sm"
+                    >
+                      <option value="">Semua Kelas</option>
+                      {KELAS_OPTIONS.map((k) => (
+                        <option key={k} value={k}>{k}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
@@ -1610,165 +1672,226 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
 
                 {filteredStudents.length === 0 ? (
                   <div className="text-center py-12 border border-dashed border-slate-200 rounded-xl bg-slate-50">
-                    <p className="text-xs text-slate-400 italic">Siswa tidak ditemukan atau belum ada data siswa.</p>
+                    <p className="text-xs text-slate-400 italic">Siswa tidak ditemukan atau belum ada data siswa yang sesuai.</p>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider bg-slate-50/50">
-                          <th className="py-3 px-4 rounded-l-lg w-12 text-center">No</th>
-                          <th className="py-3 px-4 w-32">NISN</th>
-                          <th className="py-3 px-4">Nama Lengkap</th>
-                          <th className="py-3 px-4 w-32">Kelas</th>
-                          <th className="py-3 px-4">Jurusan</th>
-                          {!isMonitoringOnly && <th className="py-3 px-4 rounded-r-lg text-right">Aksi</th>}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 text-slate-600">
-                        {filteredStudents.map((stud, idx) => {
-                          const isEditing = editingStudentMasterId === stud.id;
-                          return (
-                            <tr key={stud.id} className={`hover:bg-slate-50/50 transition-colors ${isEditing ? 'bg-indigo-50/40' : ''}`}>
-                              {isEditing ? (
-                                <>
-                                  <td className="py-3 px-4 text-center font-medium text-slate-400">
-                                    {idx + 1}
-                                  </td>
-                                  <td className="py-3 px-4">
-                                    <input
-                                      type="text"
-                                      value={editNomorInduk}
-                                      onChange={(e) => setEditNomorInduk(e.target.value)}
-                                      className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-medium font-mono"
-                                      placeholder="NISN"
-                                    />
-                                  </td>
-                                  <td className="py-3 px-4 space-y-1">
-                                    <input
-                                      type="text"
-                                      value={editNama}
-                                      onChange={(e) => setEditNama(e.target.value)}
-                                      className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-semibold"
-                                      placeholder="Nama Lengkap"
-                                    />
-                                    <div className="flex gap-1">
-                                      <input
-                                        type="text"
-                                        value={editTelepon}
-                                        onChange={(e) => setEditTelepon(e.target.value)}
-                                        className="w-1/2 px-2 py-0.5 rounded border border-slate-200 bg-white text-[10px] text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                                        placeholder="Telepon"
-                                      />
-                                      <input
-                                        type="text"
-                                        value={editPassword}
-                                        onChange={(e) => setEditPassword(e.target.value)}
-                                        className="w-1/2 px-2 py-0.5 rounded border border-slate-200 bg-white text-[10px] text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono"
-                                        placeholder="Sandi login"
-                                      />
-                                    </div>
-                                    <span className="text-[9px] text-slate-400 block px-1">{stud.email}</span>
-                                  </td>
-                                  <td className="py-3 px-4">
-                                    <select
-                                      value={editKelas}
-                                      onChange={(e) => setEditKelas(e.target.value)}
-                                      className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-medium"
-                                    >
-                                      <option value="">-- Pilih Kelas --</option>
-                                      {KELAS_OPTIONS.map(opt => (
-                                        <option key={opt} value={opt}>{opt}</option>
-                                      ))}
-                                    </select>
-                                  </td>
-                                  <td className="py-3 px-4">
-                                    <select
-                                      value={editJurusan}
-                                      onChange={(e) => setEditJurusan(e.target.value)}
-                                      className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                                    >
-                                      <option value="">-- Pilih Jurusan --</option>
-                                      {JURUSAN_OPTIONS.map(opt => (
-                                        <option key={opt} value={opt}>{opt}</option>
-                                      ))}
-                                    </select>
-                                  </td>
-                                  <td className="py-3 px-4 text-right">
-                                    <div className="flex gap-1 justify-end">
-                                      <button
-                                        onClick={() => setEditingStudentMasterId(null)}
-                                        className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold"
-                                      >
-                                        Batal
-                                      </button>
-                                      <button
-                                        onClick={() => handleUpdateStudentMaster(stud.id)}
-                                        className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-0.5"
-                                      >
-                                        <Check className="w-3.5 h-3.5" /> Simpan
-                                      </button>
-                                    </div>
-                                  </td>
-                                </>
-                              ) : (
-                                <>
-                                  <td className="py-3.5 px-4 text-center font-medium text-slate-400">
-                                    {idx + 1}
-                                  </td>
-                                  <td className="py-3.5 px-4 font-mono font-medium text-slate-700">
-                                    {stud.nomor_induk}
-                                  </td>
-                                  <td className="py-3.5 px-4">
-                                    <span className="font-bold text-slate-800 block">{stud.nama}</span>
-                                    <div className="flex flex-wrap gap-x-2 gap-y-0.5 items-center mt-0.5">
-                                      <span className="text-[10px] text-slate-400">{stud.email}</span>
-                                      {stud.telepon && (
-                                        <span className="text-[10px] text-slate-400">• Telp: {stud.telepon}</span>
+                  <div className="space-y-4">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider bg-slate-50/50">
+                            <th className="py-3 px-4 rounded-l-lg w-12 text-center">No</th>
+                            <th className="py-3 px-4 w-32">NISN</th>
+                            <th className="py-3 px-4">Nama Lengkap</th>
+                            <th className="py-3 px-4 w-32">Kelas</th>
+                            <th className="py-3 px-4">Jurusan</th>
+                            {!isMonitoringOnly && <th className="py-3 px-4 rounded-r-lg text-right">Aksi</th>}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-slate-600">
+                          {(() => {
+                            const itemsPerPage = 8;
+                            const totalStudentsPages = Math.ceil(filteredStudents.length / itemsPerPage) || 1;
+                            const currentStudentsPage = Math.min(studentsPage, totalStudentsPages);
+                            const paginatedStudents = filteredStudents.slice(
+                              (currentStudentsPage - 1) * itemsPerPage,
+                              currentStudentsPage * itemsPerPage
+                            );
+
+                            return paginatedStudents.map((stud, idx) => {
+                              const actualIndex = (currentStudentsPage - 1) * itemsPerPage + idx + 1;
+                              const isEditing = editingStudentMasterId === stud.id;
+                              return (
+                                <tr key={stud.id} className={`hover:bg-slate-50/50 transition-colors ${isEditing ? 'bg-indigo-50/40' : ''}`}>
+                                  {isEditing ? (
+                                    <>
+                                      <td className="py-3 px-4 text-center font-medium text-slate-400">
+                                        {actualIndex}
+                                      </td>
+                                      <td className="py-3 px-4">
+                                        <input
+                                          type="text"
+                                          value={editNomorInduk}
+                                          onChange={(e) => setEditNomorInduk(e.target.value)}
+                                          className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-medium font-mono"
+                                          placeholder="NISN"
+                                        />
+                                      </td>
+                                      <td className="py-3 px-4 space-y-1">
+                                        <input
+                                          type="text"
+                                          value={editNama}
+                                          onChange={(e) => setEditNama(e.target.value)}
+                                          className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-semibold"
+                                          placeholder="Nama Lengkap"
+                                        />
+                                        <div className="flex gap-1">
+                                          <input
+                                            type="text"
+                                            value={editTelepon}
+                                            onChange={(e) => setEditTelepon(e.target.value)}
+                                            className="w-1/2 px-2 py-0.5 rounded border border-slate-200 bg-white text-[10px] text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                                            placeholder="Telepon"
+                                          />
+                                          <input
+                                            type="text"
+                                            value={editPassword}
+                                            onChange={(e) => setEditPassword(e.target.value)}
+                                            className="w-1/2 px-2 py-0.5 rounded border border-slate-200 bg-white text-[10px] text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono"
+                                            placeholder="Sandi login"
+                                          />
+                                        </div>
+                                        <span className="text-[9px] text-slate-400 block px-1">{stud.email}</span>
+                                      </td>
+                                      <td className="py-3 px-4">
+                                        <select
+                                          value={editKelas}
+                                          onChange={(e) => setEditKelas(e.target.value)}
+                                          className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-medium"
+                                        >
+                                          <option value="">-- Pilih Kelas --</option>
+                                          {KELAS_OPTIONS.map(opt => (
+                                            <option key={opt} value={opt}>{opt}</option>
+                                          ))}
+                                        </select>
+                                      </td>
+                                      <td className="py-3 px-4">
+                                        <select
+                                          value={editJurusan}
+                                          onChange={(e) => setEditJurusan(e.target.value)}
+                                          className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                                        >
+                                          <option value="">-- Pilih Jurusan --</option>
+                                          {JURUSAN_OPTIONS.map(opt => (
+                                            <option key={opt} value={opt}>{opt}</option>
+                                          ))}
+                                        </select>
+                                      </td>
+                                      <td className="py-3 px-4 text-right">
+                                        <div className="flex gap-1 justify-end">
+                                          <button
+                                            onClick={() => setEditingStudentMasterId(null)}
+                                            className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold"
+                                          >
+                                            Batal
+                                          </button>
+                                          <button
+                                            onClick={() => handleUpdateStudentMaster(stud.id)}
+                                            className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-0.5"
+                                          >
+                                            <Check className="w-3.5 h-3.5" /> Simpan
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <td className="py-3.5 px-4 text-center font-medium text-slate-400">
+                                        {actualIndex}
+                                      </td>
+                                      <td className="py-3.5 px-4 font-mono font-medium text-slate-700">
+                                        {stud.nomor_induk}
+                                      </td>
+                                      <td className="py-3.5 px-4">
+                                        <span className="font-bold text-slate-800 block">{stud.nama}</span>
+                                        <div className="flex flex-wrap gap-x-2 gap-y-0.5 items-center mt-0.5">
+                                          <span className="text-[10px] text-slate-400">{stud.email}</span>
+                                          {stud.telepon && (
+                                            <span className="text-[10px] text-slate-400">• Telp: {stud.telepon}</span>
+                                          )}
+                                          <span className="text-[10px] text-slate-400">• Pass: {stud.password || 'password123'}</span>
+                                        </div>
+                                      </td>
+                                      <td className="py-3.5 px-4 font-semibold text-indigo-700">
+                                        {stud.kelas || <span className="text-slate-300 italic font-normal">Belum diisi</span>}
+                                      </td>
+                                      <td className="py-3.5 px-4 text-slate-600 font-medium">
+                                        {stud.jurusan || <span className="text-slate-300 italic">Belum diisi</span>}
+                                      </td>
+                                      {!isMonitoringOnly && (
+                                        <td className="py-3.5 px-4 text-right">
+                                          <div className="flex items-center justify-end gap-1.5">
+                                            <button
+                                              onClick={() => {
+                                                setEditingStudentMasterId(stud.id);
+                                                setEditNama(stud.nama);
+                                                setEditNomorInduk(stud.nomor_induk);
+                                                setEditKelas(stud.kelas || '');
+                                                setEditJurusan(stud.jurusan || '');
+                                                setEditTelepon(stud.telepon || '');
+                                                setEditPassword(stud.password || 'password123');
+                                              }}
+                                              className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold hover:underline px-2 py-1 hover:bg-indigo-50/50 rounded-md transition-all"
+                                            >
+                                              Edit
+                                            </button>
+                                            <button
+                                              onClick={() => handleDeleteUser(stud.id)}
+                                              className="text-rose-600 hover:text-rose-800 p-1.5 rounded-lg hover:bg-rose-50 border border-transparent transition-all inline-flex"
+                                              title="Hapus Siswa"
+                                            >
+                                              <Trash2 className="w-4 h-4" />
+                                            </button>
+                                          </div>
+                                        </td>
                                       )}
-                                      <span className="text-[10px] text-slate-400">• Pass: {stud.password || 'password123'}</span>
-                                    </div>
-                                  </td>
-                                  <td className="py-3.5 px-4 font-semibold text-indigo-700">
-                                    {stud.kelas || <span className="text-slate-300 italic font-normal">Belum diisi</span>}
-                                  </td>
-                                  <td className="py-3.5 px-4 text-slate-600 font-medium">
-                                    {stud.jurusan || <span className="text-slate-300 italic">Belum diisi</span>}
-                                  </td>
-                                  {!isMonitoringOnly && (
-                                    <td className="py-3.5 px-4 text-right">
-                                      <div className="flex items-center justify-end gap-1.5">
-                                        <button
-                                          onClick={() => {
-                                            setEditingStudentMasterId(stud.id);
-                                            setEditNama(stud.nama);
-                                            setEditNomorInduk(stud.nomor_induk);
-                                            setEditKelas(stud.kelas || '');
-                                            setEditJurusan(stud.jurusan || '');
-                                            setEditTelepon(stud.telepon || '');
-                                            setEditPassword(stud.password || 'password123');
-                                          }}
-                                          className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold hover:underline px-2 py-1 hover:bg-indigo-50/50 rounded-md transition-all"
-                                        >
-                                          Edit
-                                        </button>
-                                        <button
-                                          onClick={() => handleDeleteUser(stud.id)}
-                                          className="text-rose-600 hover:text-rose-800 p-1.5 rounded-lg hover:bg-rose-50 border border-transparent transition-all inline-flex"
-                                          title="Hapus Siswa"
-                                        >
-                                          <Trash2 className="w-4 h-4" />
-                                        </button>
-                                      </div>
-                                    </td>
+                                    </>
                                   )}
-                                </>
-                              )}
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                                </tr>
+                              );
+                            });
+                          })()}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Pagination Controls */}
+                    {(() => {
+                      const itemsPerPage = 8;
+                      const totalStudentsPages = Math.ceil(filteredStudents.length / itemsPerPage) || 1;
+                      const currentStudentsPage = Math.min(studentsPage, totalStudentsPages);
+
+                      if (totalStudentsPages <= 1) return null;
+                      return (
+                        <div className="flex flex-col sm:flex-row items-center justify-between border-t border-slate-100 pt-4 gap-3 text-xs text-slate-500">
+                          <p className="font-medium text-slate-400">
+                            Menampilkan <span className="font-bold text-slate-700">{Math.min((currentStudentsPage - 1) * itemsPerPage + 1, filteredStudents.length)}</span> - <span className="font-bold text-slate-700">{Math.min(currentStudentsPage * itemsPerPage, filteredStudents.length)}</span> dari <span className="font-bold text-slate-700">{filteredStudents.length}</span> siswa
+                          </p>
+                          
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => setStudentsPage(prev => Math.max(prev - 1, 1))}
+                              disabled={currentStudentsPage === 1}
+                              className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                            >
+                              <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            
+                            {Array.from({ length: totalStudentsPages }, (_, i) => i + 1).map((pg) => (
+                              <button
+                                key={pg}
+                                onClick={() => setStudentsPage(pg)}
+                                className={`w-7 h-7 text-xs font-bold rounded-lg transition-all ${
+                                  currentStudentsPage === pg
+                                    ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
+                                    : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 font-semibold'
+                                }`}
+                              >
+                                {pg}
+                              </button>
+                            ))}
+
+                            <button
+                              onClick={() => setStudentsPage(prev => Math.min(prev + 1, totalStudentsPages))}
+                              disabled={currentStudentsPage === totalStudentsPages}
+                              className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                            >
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
@@ -1812,12 +1935,12 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                   type="text"
                   placeholder="Cari guru berdasarkan Nama, NIP/NIK, atau No Telepon..."
                   value={teacherSearch}
-                  onChange={(e) => setTeacherSearch(e.target.value)}
+                  onChange={(e) => { setTeacherSearch(e.target.value); setTeachersPage(1); }}
                   className="flex-1 px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50/50 text-slate-800 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none placeholder-slate-400 font-medium transition-all"
                 />
                 {teacherSearch && (
                   <button
-                    onClick={() => setTeacherSearch('')}
+                    onClick={() => { setTeacherSearch(''); setTeachersPage(1); }}
                     className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-semibold text-xs transition-all"
                   >
                     Clear
@@ -1880,84 +2003,377 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
               </div>
 
               {/* TEACHERS LIST TABLE */}
-              <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
+              <div className="bg-white rounded-xl border border-slate-100 p-4 space-y-4">
                 {filteredTeachers.length === 0 ? (
                   <div className="py-12 text-center text-slate-400 text-xs">
                     Tidak ada data guru pembimbing yang ditemukan.
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider bg-slate-50/30">
-                          <th className="py-3 px-4 text-center w-12">No</th>
-                          <th className="py-3 px-4 w-40">NIP / NIK</th>
-                          <th className="py-3 px-4">Nama & Informasi Akun</th>
-                          <th className="py-3 px-4 w-40 text-center">Bimbingan Siswa</th>
-                          {!isMonitoringOnly && <th className="py-3 px-4 text-right w-36">Aksi</th>}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 text-slate-600">
-                        {filteredTeachers.map((teacher, idx) => {
-                          const isEditing = editingTeacherMasterId === teacher.id;
-                          const bimbinganCount = allStudents.filter(s => s.id_pembimbing === teacher.id).length;
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider bg-slate-50/30">
+                            <th className="py-3 px-4 text-center w-12">No</th>
+                            <th className="py-3 px-4 w-40">NIP / NIK</th>
+                            <th className="py-3 px-4">Nama & Informasi Akun</th>
+                            <th className="py-3 px-4 w-40 text-center">Bimbingan Siswa</th>
+                            {!isMonitoringOnly && <th className="py-3 px-4 text-right w-36">Aksi</th>}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-slate-600">
+                          {(() => {
+                            const itemsPerPage = 8;
+                            const totalTeachersPages = Math.ceil(filteredTeachers.length / itemsPerPage) || 1;
+                            const currentTeachersPage = Math.min(teachersPage, totalTeachersPages);
+                            const paginatedTeachers = filteredTeachers.slice(
+                              (currentTeachersPage - 1) * itemsPerPage,
+                              currentTeachersPage * itemsPerPage
+                            );
+
+                            return paginatedTeachers.map((teacher, idx) => {
+                              const actualIndex = (currentTeachersPage - 1) * itemsPerPage + idx + 1;
+                              const isEditing = editingTeacherMasterId === teacher.id;
+                              const bimbinganCount = allStudents.filter(s => s.id_pembimbing === teacher.id).length;
+                              return (
+                                <tr key={teacher.id} className={`hover:bg-slate-50/30 transition-colors ${isEditing ? 'bg-indigo-50/30' : ''}`}>
+                                  {isEditing ? (
+                                    <>
+                                      <td className="py-3 px-4 text-center font-medium text-slate-400">
+                                        {actualIndex}
+                                      </td>
+                                      <td className="py-3 px-4">
+                                        <input
+                                          type="text"
+                                          value={editNomorInduk}
+                                          onChange={(e) => setEditNomorInduk(e.target.value)}
+                                          className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-medium font-mono"
+                                          placeholder="NIP/NIK"
+                                        />
+                                      </td>
+                                      <td className="py-3 px-4 space-y-1">
+                                        <input
+                                          type="text"
+                                          value={editNama}
+                                          onChange={(e) => setEditNama(e.target.value)}
+                                          className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-semibold"
+                                          placeholder="Nama Lengkap"
+                                        />
+                                        <div className="flex gap-1">
+                                          <input
+                                            type="text"
+                                            value={editTelepon}
+                                            onChange={(e) => setEditTelepon(e.target.value)}
+                                            className="w-1/2 px-2 py-0.5 rounded border border-slate-200 bg-white text-[10px] text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                                            placeholder="Telepon"
+                                          />
+                                          <input
+                                            type="text"
+                                            value={editPassword}
+                                            onChange={(e) => setEditPassword(e.target.value)}
+                                            className="w-1/2 px-2 py-0.5 rounded border border-slate-200 bg-white text-[10px] text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono"
+                                            placeholder="Sandi login"
+                                          />
+                                        </div>
+                                        <span className="text-[9px] text-slate-400 block px-1">{teacher.email}</span>
+                                      </td>
+                                      <td className="py-3 px-4 text-center">
+                                        <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600 font-bold text-[10px]">
+                                          {bimbinganCount} Siswa
+                                        </span>
+                                      </td>
+                                      <td className="py-3 px-4 text-right">
+                                        <div className="flex gap-1 justify-end">
+                                          <button
+                                            onClick={() => setEditingTeacherMasterId(null)}
+                                            className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold"
+                                          >
+                                            Batal
+                                          </button>
+                                          <button
+                                            onClick={() => handleUpdateTeacherMaster(teacher.id)}
+                                            className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-0.5"
+                                          >
+                                            <Check className="w-3.5 h-3.5" /> Simpan
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <td className="py-3.5 px-4 text-center font-medium text-slate-400">
+                                        {actualIndex}
+                                      </td>
+                                      <td className="py-3.5 px-4 font-mono font-medium text-slate-700">
+                                        {teacher.nomor_induk}
+                                      </td>
+                                      <td className="py-3.5 px-4">
+                                        <span className="font-bold text-slate-800 block">{teacher.nama}</span>
+                                        <div className="flex flex-wrap gap-x-2 gap-y-0.5 items-center mt-0.5">
+                                          <span className="text-[10px] text-slate-400">{teacher.email}</span>
+                                          {teacher.telepon && (
+                                            <span className="text-[10px] text-slate-400">• Telp: {teacher.telepon}</span>
+                                          )}
+                                          <span className="text-[10px] text-slate-400">• Pass: {teacher.password || 'password123'}</span>
+                                        </div>
+                                      </td>
+                                      <td className="py-3.5 px-4 text-center font-semibold text-slate-800">
+                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                          bimbinganCount > 0 
+                                            ? 'bg-indigo-50 text-indigo-600' 
+                                            : 'bg-amber-50 text-amber-600'
+                                        }`}>
+                                          {bimbinganCount} Siswa
+                                        </span>
+                                      </td>
+                                      {!isMonitoringOnly && (
+                                        <td className="py-3.5 px-4 text-right">
+                                          <div className="flex items-center justify-end gap-1.5">
+                                            <button
+                                              onClick={() => {
+                                                setEditingTeacherMasterId(teacher.id);
+                                                setEditNama(teacher.nama);
+                                                setEditNomorInduk(teacher.nomor_induk);
+                                                setEditTelepon(teacher.telepon || '');
+                                                setEditPassword(teacher.password || 'password123');
+                                              }}
+                                              className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold hover:underline px-2 py-1 hover:bg-indigo-50/50 rounded-md transition-all"
+                                            >
+                                              Edit
+                                            </button>
+                                            <button
+                                              onClick={() => handleDeleteUser(teacher.id)}
+                                              className="text-rose-600 hover:text-rose-800 p-1.5 rounded-lg hover:bg-rose-50 border border-transparent transition-all inline-flex"
+                                              title="Hapus Guru"
+                                            >
+                                              <Trash2 className="w-4 h-4" />
+                                            </button>
+                                          </div>
+                                        </td>
+                                      )}
+                                    </>
+                                  )}
+                                </tr>
+                              );
+                            });
+                          })()}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Pagination Controls */}
+                    {(() => {
+                      const itemsPerPage = 8;
+                      const totalTeachersPages = Math.ceil(filteredTeachers.length / itemsPerPage) || 1;
+                      const currentTeachersPage = Math.min(teachersPage, totalTeachersPages);
+
+                      if (totalTeachersPages <= 1) return null;
+                      return (
+                        <div className="flex flex-col sm:flex-row items-center justify-between border-t border-slate-100 pt-4 gap-3 text-xs text-slate-500">
+                          <p className="font-medium text-slate-400">
+                            Menampilkan <span className="font-bold text-slate-700">{Math.min((currentTeachersPage - 1) * itemsPerPage + 1, filteredTeachers.length)}</span> - <span className="font-bold text-slate-700">{Math.min(currentTeachersPage * itemsPerPage, filteredTeachers.length)}</span> dari <span className="font-bold text-slate-700">{filteredTeachers.length}</span> guru
+                          </p>
+                          
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => setTeachersPage(prev => Math.max(prev - 1, 1))}
+                              disabled={currentTeachersPage === 1}
+                              className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                            >
+                              <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            
+                            {Array.from({ length: totalTeachersPages }, (_, i) => i + 1).map((pg) => (
+                              <button
+                                key={pg}
+                                onClick={() => setTeachersPage(pg)}
+                                className={`w-7 h-7 text-xs font-bold rounded-lg transition-all ${
+                                  currentTeachersPage === pg
+                                    ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
+                                    : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 font-semibold'
+                                }`}
+                              >
+                                {pg}
+                              </button>
+                            ))}
+
+                            <button
+                              onClick={() => setTeachersPage(prev => Math.min(prev + 1, totalTeachersPages))}
+                              disabled={currentTeachersPage === totalTeachersPages}
+                              className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                            >
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: USER MANAGEMENT */}
+          {activeTab === 'users' && (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-4" id="admin-users-mgmt">
+              <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+                <div>
+                  <h3 className="text-base font-bold text-slate-800 font-sans tracking-tight font-bold">Manajemen Master Pengguna</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Atur semua akun siswa, guru, pembimbing mitra industri, dan koordinator sekolah.</p>
+                </div>
+                
+                {/* Search & Filter Controls */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      placeholder="Cari nama, email, NISN..."
+                      className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-800 w-44 sm:w-56 shadow-sm font-medium"
+                      onChange={(e) => { setUsersSearch(e.target.value); setUsersPage(1); }}
+                      value={usersSearch}
+                    />
+                  </div>
+                  
+                  <select
+                    value={usersRoleFilter}
+                    onChange={(e) => { setUsersRoleFilter(e.target.value); setUsersPage(1); }}
+                    className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-700 shadow-sm font-semibold"
+                  >
+                    <option value="">Semua Peran</option>
+                    <option value="siswa">Siswa</option>
+                    <option value="guru">Guru</option>
+                    <option value="industri">Industri</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+              </div>
+ 
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider bg-slate-50/30">
+                      <th className="py-3 px-4 text-center w-12">No</th>
+                      <th className="py-3 px-4">Nama & Email</th>
+                      <th className="py-3 px-4 w-28">Role / Peran</th>
+                      <th className="py-3 px-4 w-32">Nomor Induk</th>
+                      <th className="py-3 px-4 w-36">No Telepon</th>
+                      <th className="py-3 px-4 w-32">Sandi Login</th>
+                      {!isMonitoringOnly && <th className="py-3 pl-4 text-right w-24">Aksi</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-600">
+                    {filteredUsers.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-8 text-center text-slate-400 italic">
+                          Pengguna tidak ditemukan atau belum ada data.
+                        </td>
+                      </tr>
+                    ) : (
+                      (() => {
+                        const itemsPerPage = 8;
+                        const totalUsersPages = Math.ceil(filteredUsers.length / itemsPerPage) || 1;
+                        const currentUsersPage = Math.min(usersPage, totalUsersPages);
+                        const paginatedUsers = filteredUsers.slice(
+                          (currentUsersPage - 1) * itemsPerPage,
+                          currentUsersPage * itemsPerPage
+                        );
+
+                        return paginatedUsers.map((user, idx) => {
+                          const actualIndex = (currentUsersPage - 1) * itemsPerPage + idx + 1;
+                          const isEditing = editingUserId === user.id;
                           return (
-                            <tr key={teacher.id} className={`hover:bg-slate-50/30 transition-colors ${isEditing ? 'bg-indigo-50/30' : ''}`}>
+                            <tr key={user.id} className={`hover:bg-slate-50/50 transition-colors ${isEditing ? 'bg-indigo-50/40' : ''}`}>
                               {isEditing ? (
                                 <>
+                                  {/* EDITING STATE */}
                                   <td className="py-3 px-4 text-center font-medium text-slate-400">
-                                    {idx + 1}
+                                    {actualIndex}
+                                  </td>
+                                  <td className="py-3 pr-4 space-y-1.5">
+                                    <input
+                                      type="text"
+                                      value={editNama}
+                                      onChange={(e) => setEditNama(e.target.value)}
+                                      className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-medium"
+                                      placeholder="Nama Lengkap"
+                                    />
+                                    {editRole === 'siswa' && (
+                                      <div className="flex gap-1.5">
+                                        <select
+                                          value={editKelas}
+                                          onChange={(e) => setEditKelas(e.target.value)}
+                                          className="w-1/2 px-2 py-0.5 rounded border border-slate-200 bg-white text-[10px] text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-medium"
+                                        >
+                                          <option value="">Kelas</option>
+                                          {KELAS_OPTIONS.map(opt => (
+                                            <option key={opt} value={opt}>{opt}</option>
+                                          ))}
+                                        </select>
+                                        <select
+                                          value={editJurusan}
+                                          onChange={(e) => setEditJurusan(e.target.value)}
+                                          className="w-1/2 px-2 py-0.5 rounded border border-slate-200 bg-white text-[10px] text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                                        >
+                                          <option value="">Jurusan</option>
+                                          {JURUSAN_OPTIONS.map(opt => (
+                                            <option key={opt} value={opt}>{opt}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                    )}
+                                    <span className="text-[10px] text-slate-400 block px-1">{user.email} (Email)</span>
+                                  </td>
+                                  <td className="py-3 px-4">
+                                    <select
+                                      value={editRole}
+                                      onChange={(e) => setEditRole(e.target.value as UserRole)}
+                                      className="px-2 py-1 rounded border border-slate-200 bg-white text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                                    >
+                                      <option value="siswa">Siswa</option>
+                                      <option value="guru">Guru</option>
+                                      <option value="industri">Industri</option>
+                                      <option value="admin">Admin</option>
+                                    </select>
                                   </td>
                                   <td className="py-3 px-4">
                                     <input
                                       type="text"
                                       value={editNomorInduk}
                                       onChange={(e) => setEditNomorInduk(e.target.value)}
-                                      className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-medium font-mono"
-                                      placeholder="NIP/NIK"
+                                      className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                                      placeholder="NISN/NIP"
                                     />
                                   </td>
-                                  <td className="py-3 px-4 space-y-1">
+                                  <td className="py-3 px-4">
                                     <input
                                       type="text"
-                                      value={editNama}
-                                      onChange={(e) => setEditNama(e.target.value)}
-                                      className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-semibold"
-                                      placeholder="Nama Lengkap"
+                                      value={editTelepon}
+                                      onChange={(e) => setEditTelepon(e.target.value)}
+                                      className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                                      placeholder="Telepon"
                                     />
-                                    <div className="flex gap-1">
-                                      <input
-                                        type="text"
-                                        value={editTelepon}
-                                        onChange={(e) => setEditTelepon(e.target.value)}
-                                        className="w-1/2 px-2 py-0.5 rounded border border-slate-200 bg-white text-[10px] text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                                        placeholder="Telepon"
-                                      />
-                                      <input
-                                        type="text"
-                                        value={editPassword}
-                                        onChange={(e) => setEditPassword(e.target.value)}
-                                        className="w-1/2 px-2 py-0.5 rounded border border-slate-200 bg-white text-[10px] text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono"
-                                        placeholder="Sandi login"
-                                      />
-                                    </div>
-                                    <span className="text-[9px] text-slate-400 block px-1">{teacher.email}</span>
                                   </td>
-                                  <td className="py-3 px-4 text-center">
-                                    <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600 font-bold text-[10px]">
-                                      {bimbinganCount} Siswa
-                                    </span>
+                                  <td className="py-3 px-4">
+                                    <input
+                                      type="text"
+                                      value={editPassword}
+                                      onChange={(e) => setEditPassword(e.target.value)}
+                                      className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono"
+                                      placeholder="Sandi login"
+                                    />
                                   </td>
-                                  <td className="py-3 px-4 text-right">
+                                  <td className="py-3 pl-4 text-right">
                                     <div className="flex gap-1 justify-end">
                                       <button
-                                        onClick={() => setEditingTeacherMasterId(null)}
+                                        onClick={() => setEditingUserId(null)}
                                         className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold"
                                       >
                                         Batal
                                       </button>
                                       <button
-                                        onClick={() => handleUpdateTeacherMaster(teacher.id)}
+                                        onClick={() => handleUpdateUser(user.id)}
                                         className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-0.5"
                                       >
                                         <Check className="w-3.5 h-3.5" /> Simpan
@@ -1967,53 +2383,67 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                                 </>
                               ) : (
                                 <>
-                                  <td className="py-3.5 px-4 text-center font-medium text-slate-400">
-                                    {idx + 1}
+                                  {/* DISPLAY STATE */}
+                                  <td className="py-3 px-4 text-center font-medium text-slate-400">
+                                    {actualIndex}
                                   </td>
-                                  <td className="py-3.5 px-4 font-mono font-medium text-slate-700">
-                                    {teacher.nomor_induk}
+                                  <td className="py-3 pr-4 text-xs">
+                                    <span className="font-semibold text-slate-800 block">{user.nama}</span>
+                                    {user.role === 'siswa' && (user.kelas || user.jurusan) && (
+                                      <span className="text-[10px] text-indigo-600 font-medium block">
+                                        {user.kelas || '-'} • {user.jurusan || '-'}
+                                      </span>
+                                    )}
+                                    <span className="text-[10px] text-slate-400">{user.email}</span>
                                   </td>
-                                  <td className="py-3.5 px-4">
-                                    <span className="font-bold text-slate-800 block">{teacher.nama}</span>
-                                    <div className="flex flex-wrap gap-x-2 gap-y-0.5 items-center mt-0.5">
-                                      <span className="text-[10px] text-slate-400">{teacher.email}</span>
-                                      {teacher.telepon && (
-                                        <span className="text-[10px] text-slate-400">• Telp: {teacher.telepon}</span>
-                                      )}
-                                      <span className="text-[10px] text-slate-400">• Pass: {teacher.password || 'password123'}</span>
-                                    </div>
-                                  </td>
-                                  <td className="py-3.5 px-4 text-center font-semibold text-slate-800">
-                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                      bimbinganCount > 0 
-                                        ? 'bg-indigo-50 text-indigo-600' 
-                                        : 'bg-amber-50 text-amber-600'
+                                  <td className="py-3 px-4">
+                                    <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                                      user.role === 'admin' ? 'bg-rose-50 text-rose-700 border border-rose-100' :
+                                      user.role === 'guru' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' :
+                                      user.role === 'industri' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
+                                      'bg-slate-100 text-slate-700 border border-slate-200'
                                     }`}>
-                                      {bimbinganCount} Siswa
+                                      {user.role}
                                     </span>
                                   </td>
+                                  <td className="py-3 px-4 font-medium text-slate-700">
+                                    {user.nomor_induk}
+                                  </td>
+                                  <td className="py-3 px-4">
+                                    {user.telepon}
+                                  </td>
+                                  <td className="py-3 px-4 font-mono text-[11px] text-slate-500">
+                                    {user.password || <span className="text-slate-300 italic">password123</span>}
+                                  </td>
                                   {!isMonitoringOnly && (
-                                    <td className="py-3.5 px-4 text-right">
+                                    <td className="py-3 pl-4 text-right">
                                       <div className="flex items-center justify-end gap-1.5">
                                         <button
                                           onClick={() => {
-                                            setEditingTeacherMasterId(teacher.id);
-                                            setEditNama(teacher.nama);
-                                            setEditNomorInduk(teacher.nomor_induk);
-                                            setEditTelepon(teacher.telepon || '');
-                                            setEditPassword(teacher.password || 'password123');
+                                            setEditingUserId(user.id);
+                                            setEditNama(user.nama);
+                                            setEditRole(user.role);
+                                            setEditNomorInduk(user.nomor_induk);
+                                            setEditTelepon(user.telepon);
+                                            setEditPassword(user.password || 'password123');
+                                            setEditKelas(user.kelas || '');
+                                            setEditJurusan(user.jurusan || '');
+                                            setEditIdInstansi(user.id_instansi || '');
+                                            setEditIdPembimbing(user.id_pembimbing || '');
                                           }}
                                           className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold hover:underline px-2 py-1 hover:bg-indigo-50/50 rounded-md transition-all"
                                         >
                                           Edit
                                         </button>
-                                        <button
-                                          onClick={() => handleDeleteUser(teacher.id)}
-                                          className="text-rose-600 hover:text-rose-800 p-1.5 rounded-lg hover:bg-rose-50 border border-transparent transition-all inline-flex"
-                                          title="Hapus Guru"
-                                        >
-                                          <Trash2 className="w-4 h-4" />
-                                        </button>
+                                        {user.email !== admin.email && (
+                                          <button
+                                            onClick={() => handleDeleteUser(user.id)}
+                                            className="text-rose-600 hover:text-rose-800 p-1.5 rounded-lg hover:bg-rose-50 border border-transparent transition-all inline-flex"
+                                            title="Hapus Pengguna"
+                                          >
+                                            <Trash2 className="w-4 h-4" />
+                                          </button>
+                                        )}
                                       </div>
                                     </td>
                                   )}
@@ -2021,395 +2451,512 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
                               )}
                             </tr>
                           );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* TAB 2: USER MANAGEMENT */}
-          {activeTab === 'users' && (
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6" id="admin-users-mgmt">
-              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 mb-4">
-                <div>
-                  <h3 className="text-base font-bold text-slate-800">Manajemen Master Pengguna ({users.length})</h3>
-                  <p className="text-xs text-slate-400">Atur semua akun siswa, guru, pembimbing mitra industri, dan koordinator sekolah.</p>
-                </div>
-              </div>
- 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-slate-400 font-semibold uppercase tracking-wider">
-                      <th className="pb-3 pr-4">Nama & Email</th>
-                      <th className="pb-3 px-4">Role / Peran</th>
-                      <th className="pb-3 px-4">Nomor Induk</th>
-                      <th className="pb-3 px-4">No Telepon</th>
-                      <th className="pb-3 px-4">Sandi Login</th>
-                      {!isMonitoringOnly && <th className="pb-3 pl-4 text-right">Aksi</th>}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-600">
-                    {users.map((user) => {
-                      const isEditing = editingUserId === user.id;
-                      return (
-                        <tr key={user.id} className={`hover:bg-slate-50/50 transition-colors ${isEditing ? 'bg-indigo-50/40' : ''}`}>
-                          {isEditing ? (
-                            <>
-                              {/* EDITING STATE */}
-                              <td className="py-3 pr-4 space-y-1.5">
-                                <input
-                                  type="text"
-                                  value={editNama}
-                                  onChange={(e) => setEditNama(e.target.value)}
-                                  className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-medium"
-                                  placeholder="Nama Lengkap"
-                                />
-                                {editRole === 'siswa' && (
-                                  <div className="flex gap-1.5">
-                                    <select
-                                      value={editKelas}
-                                      onChange={(e) => setEditKelas(e.target.value)}
-                                      className="w-1/2 px-2 py-0.5 rounded border border-slate-200 bg-white text-[10px] text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-medium"
-                                    >
-                                      <option value="">Kelas</option>
-                                      {KELAS_OPTIONS.map(opt => (
-                                        <option key={opt} value={opt}>{opt}</option>
-                                      ))}
-                                    </select>
-                                    <select
-                                      value={editJurusan}
-                                      onChange={(e) => setEditJurusan(e.target.value)}
-                                      className="w-1/2 px-2 py-0.5 rounded border border-slate-200 bg-white text-[10px] text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                                    >
-                                      <option value="">Jurusan</option>
-                                      {JURUSAN_OPTIONS.map(opt => (
-                                        <option key={opt} value={opt}>{opt}</option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                )}
-                                <span className="text-[10px] text-slate-400 block px-1">{user.email} (Email)</span>
-                              </td>
-                              <td className="py-3 px-4">
-                                <select
-                                  value={editRole}
-                                  onChange={(e) => setEditRole(e.target.value as UserRole)}
-                                  className="px-2 py-1 rounded border border-slate-200 bg-white text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                                >
-                                  <option value="siswa">Siswa</option>
-                                  <option value="guru">Guru</option>
-                                  <option value="industri">Industri</option>
-                                  <option value="admin">Admin</option>
-                                </select>
-                              </td>
-                              <td className="py-3 px-4">
-                                <input
-                                  type="text"
-                                  value={editNomorInduk}
-                                  onChange={(e) => setEditNomorInduk(e.target.value)}
-                                  className="w-28 px-2 py-1 rounded border border-slate-200 bg-white text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                                  placeholder="NISN/NIP"
-                                />
-                              </td>
-                              <td className="py-3 px-4">
-                                <input
-                                  type="text"
-                                  value={editTelepon}
-                                  onChange={(e) => setEditTelepon(e.target.value)}
-                                  className="w-28 px-2 py-1 rounded border border-slate-200 bg-white text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                                  placeholder="Telepon"
-                                />
-                              </td>
-                              <td className="py-3 px-4">
-                                <input
-                                  type="text"
-                                  value={editPassword}
-                                  onChange={(e) => setEditPassword(e.target.value)}
-                                  className="w-28 px-2 py-1 rounded border border-slate-200 bg-white text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono"
-                                  placeholder="Sandi login"
-                                />
-                              </td>
-                              <td className="py-3 pl-4 text-right">
-                                <div className="flex gap-1 justify-end">
-                                  <button
-                                    onClick={() => setEditingUserId(null)}
-                                    className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold"
-                                  >
-                                    Batal
-                                  </button>
-                                  <button
-                                    onClick={() => handleUpdateUser(user.id)}
-                                    className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-0.5"
-                                  >
-                                    <Check className="w-3.5 h-3.5" /> Simpan
-                                  </button>
-                                </div>
-                              </td>
-                            </>
-                          ) : (
-                            <>
-                              {/* DISPLAY STATE */}
-                              <td className="py-3 pr-4 text-xs">
-                                <span className="font-semibold text-slate-800 block">{user.nama}</span>
-                                {user.role === 'siswa' && (user.kelas || user.jurusan) && (
-                                  <span className="text-[10px] text-indigo-600 font-medium block">
-                                    {user.kelas || '-'} • {user.jurusan || '-'}
-                                  </span>
-                                )}
-                                <span className="text-[10px] text-slate-400">{user.email}</span>
-                              </td>
-                              <td className="py-3 px-4">
-                                <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
-                                  user.role === 'admin' ? 'bg-rose-50 text-rose-700 border border-rose-100' :
-                                  user.role === 'guru' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' :
-                                  user.role === 'industri' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
-                                  'bg-slate-100 text-slate-700 border border-slate-200'
-                                }`}>
-                                  {user.role}
-                                </span>
-                              </td>
-                              <td className="py-3 px-4 font-medium text-slate-700">
-                                {user.nomor_induk}
-                              </td>
-                              <td className="py-3 px-4">
-                                {user.telepon}
-                              </td>
-                              <td className="py-3 px-4 font-mono text-[11px] text-slate-500">
-                                {user.password || <span className="text-slate-300 italic">password123</span>}
-                              </td>
-                              {!isMonitoringOnly && (
-                                <td className="py-3 pl-4 text-right">
-                                  <div className="flex items-center justify-end gap-1.5">
-                                    <button
-                                      onClick={() => {
-                                        setEditingUserId(user.id);
-                                        setEditNama(user.nama);
-                                        setEditRole(user.role);
-                                        setEditNomorInduk(user.nomor_induk);
-                                        setEditTelepon(user.telepon);
-                                        setEditPassword(user.password || 'password123');
-                                        setEditKelas(user.kelas || '');
-                                        setEditJurusan(user.jurusan || '');
-                                        setEditIdInstansi(user.id_instansi || '');
-                                        setEditIdPembimbing(user.id_pembimbing || '');
-                                      }}
-                                      className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold hover:underline px-2 py-1 hover:bg-indigo-50/50 rounded-md transition-all"
-                                    >
-                                      Edit
-                                    </button>
-                                    {user.email !== admin.email && (
-                                      <button
-                                        onClick={() => handleDeleteUser(user.id)}
-                                        className="text-rose-600 hover:text-rose-800 p-1.5 rounded-lg hover:bg-rose-50 border border-transparent transition-all inline-flex"
-                                        title="Hapus Pengguna"
-                                      >
-                                        <Trash2 className="w-4 h-4" />
-                                      </button>
-                                    )}
-                                  </div>
-                                </td>
-                              )}
-                            </>
-                          )}
-                        </tr>
-                      );
-                    })}
+                        });
+                      })()
+                    )}
                   </tbody>
                 </table>
               </div>
+
+              {/* Pagination Controls */}
+              {(() => {
+                const itemsPerPage = 8;
+                const totalUsersPages = Math.ceil(filteredUsers.length / itemsPerPage) || 1;
+                const currentUsersPage = Math.min(usersPage, totalUsersPages);
+
+                if (totalUsersPages <= 1) return null;
+                return (
+                  <div className="flex flex-col sm:flex-row items-center justify-between border-t border-slate-100 pt-4 gap-3 text-xs text-slate-500">
+                    <p className="font-medium text-slate-400">
+                      Menampilkan <span className="font-bold text-slate-700">{Math.min((currentUsersPage - 1) * itemsPerPage + 1, filteredUsers.length)}</span> - <span className="font-bold text-slate-700">{Math.min(currentUsersPage * itemsPerPage, filteredUsers.length)}</span> dari <span className="font-bold text-slate-700">{filteredUsers.length}</span> pengguna
+                    </p>
+                    
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setUsersPage(prev => Math.max(prev - 1, 1))}
+                        disabled={currentUsersPage === 1}
+                        className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      
+                      {Array.from({ length: totalUsersPages }, (_, i) => i + 1).map((pg) => (
+                        <button
+                          key={pg}
+                          onClick={() => setUsersPage(pg)}
+                          className={`w-7 h-7 text-xs font-bold rounded-lg transition-all ${
+                            currentUsersPage === pg
+                              ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
+                              : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 font-semibold'
+                          }`}
+                        >
+                          {pg}
+                        </button>
+                      ))}
+
+                      <button
+                        onClick={() => setUsersPage(prev => Math.min(prev + 1, totalUsersPages))}
+                        disabled={currentUsersPage === totalUsersPages}
+                        className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
           {/* TAB 3: COMPANIES MANAGEMENT */}
           {activeTab === 'companies' && (
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6" id="admin-companies-mgmt">
-              <h3 className="text-base font-bold text-slate-800 mb-4">Daftar Mitra Instansi & Perusahaan ({instansiList.length})</h3>
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-6" id="admin-companies-mgmt">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">Daftar Mitra Instansi & Perusahaan</h3>
+                  <p className="text-xs text-slate-400">Daftar lengkap mitra industri, alamat lokasi magang, kuota, serta kontak pembimbing industri.</p>
+                </div>
+                {/* Search Bar */}
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    placeholder="Cari instansi, alamat..."
+                    className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-800 w-48 sm:w-64 shadow-sm"
+                    onChange={(e) => { setCompaniesSearch(e.target.value); setCompaniesPage(1); }}
+                    value={companiesSearch}
+                  />
+                </div>
+              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {instansiList.map((inst) => {
-                  const plotSiswaCount = users.filter(u => u.role === 'siswa' && u.id_instansi === inst.id).length;
-                  return (
-                    <div key={inst.id} className="p-4 rounded-xl border border-slate-100 hover:border-slate-200 transition-all text-xs flex justify-between gap-4">
-                      <div className="space-y-1.5">
-                        <strong className="text-sm text-slate-800 block">{inst.nama_instansi}</strong>
-                        <p className="text-slate-500 flex items-center gap-1">
-                          <MapPin className="w-3.5 h-3.5" /> {inst.alamat}
-                        </p>
-                        <p className="text-slate-600">
-                          Kuota Siswa: <strong>{inst.kuota}</strong> | Sedang Magang: <strong className="text-indigo-600">{plotSiswaCount} siswa</strong>
-                        </p>
-                        {inst.pembimbing_nama && (
-                          <div className="pt-1.5 border-t border-slate-100 text-slate-500">
-                            Pembimbing Industri: <strong>{inst.pembimbing_nama}</strong> ({inst.pembimbing_telp || 'no telepon'})
+              {filteredCompanies.length === 0 ? (
+                <div className="text-center py-12 border border-dashed border-slate-200 rounded-xl bg-slate-50">
+                  <p className="text-xs text-slate-400 italic">Instansi tidak ditemukan atau belum ada data instansi.</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {(() => {
+                      const itemsPerPage = 6;
+                      const totalCompaniesPages = Math.ceil(filteredCompanies.length / itemsPerPage) || 1;
+                      const currentCompaniesPage = Math.min(companiesPage, totalCompaniesPages);
+                      const paginatedCompanies = filteredCompanies.slice(
+                        (currentCompaniesPage - 1) * itemsPerPage,
+                        currentCompaniesPage * itemsPerPage
+                      );
+
+                      return paginatedCompanies.map((inst) => {
+                        const plotSiswaCount = users.filter(u => u.role === 'siswa' && u.id_instansi === inst.id).length;
+                        return (
+                          <div key={inst.id} className="p-4 rounded-xl border border-slate-100 hover:border-slate-200 transition-all text-xs flex justify-between gap-4 bg-slate-50/30">
+                            <div className="space-y-1.5 flex-1 min-w-0">
+                              <strong className="text-sm text-slate-800 block truncate">{inst.nama_instansi}</strong>
+                              <p className="text-slate-500 flex items-center gap-1">
+                                <MapPin className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">{inst.alamat}</span>
+                              </p>
+                              <p className="text-slate-600">
+                                Kuota Siswa: <strong>{inst.kuota}</strong> | Sedang Magang: <strong className="text-indigo-600">{plotSiswaCount} siswa</strong>
+                              </p>
+                              {inst.pembimbing_nama && (
+                                <div className="pt-1.5 border-t border-slate-100 text-slate-500 truncate">
+                                  Pembimbing Industri: <strong>{inst.pembimbing_nama}</strong> ({inst.pembimbing_telp || 'no telepon'})
+                                </div>
+                              )}
+                            </div>
+
+                            {!isMonitoringOnly && (
+                              <div className="flex flex-col gap-1.5 shrink-0 justify-start items-end">
+                                <button
+                                  onClick={() => {
+                                    setEditingInstansiId(inst.id);
+                                    setInstNama(inst.nama_instansi);
+                                    setInstAlamat(inst.alamat);
+                                    setInstKuota(inst.kuota);
+                                    setInstPembimbingNama(inst.pembimbing_nama || '');
+                                    setInstPembimbingTelp(inst.pembimbing_telp || '');
+                                  }}
+                                  className="p-2 text-indigo-500 hover:bg-indigo-50 rounded-lg hover:text-indigo-700 transition-all border border-transparent hover:border-indigo-100"
+                                  title="Edit Instansi"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteInstansi(inst.id)}
+                                  className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg hover:text-rose-700 transition-all border border-transparent hover:border-rose-100"
+                                  title="Hapus Instansi"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
+                        );
+                      });
+                    })()}
+                  </div>
 
-                      {!isMonitoringOnly && (
-                        <div className="flex flex-col gap-1.5 shrink-0 justify-start items-end">
+                  {/* Pagination Controls */}
+                  {(() => {
+                    const itemsPerPage = 6;
+                    const totalCompaniesPages = Math.ceil(filteredCompanies.length / itemsPerPage) || 1;
+                    const currentCompaniesPage = Math.min(companiesPage, totalCompaniesPages);
+
+                    if (totalCompaniesPages <= 1) return null;
+                    return (
+                      <div className="flex flex-col sm:flex-row items-center justify-between border-t border-slate-100 pt-4 gap-3 text-xs text-slate-500">
+                        <p className="font-medium text-slate-400">
+                          Menampilkan <span className="font-bold text-slate-700">{Math.min((currentCompaniesPage - 1) * itemsPerPage + 1, filteredCompanies.length)}</span> - <span className="font-bold text-slate-700">{Math.min(currentCompaniesPage * itemsPerPage, filteredCompanies.length)}</span> dari <span className="font-bold text-slate-700">{filteredCompanies.length}</span> instansi
+                        </p>
+                        
+                        <div className="flex items-center gap-1">
                           <button
-                            onClick={() => {
-                              setEditingInstansiId(inst.id);
-                              setInstNama(inst.nama_instansi);
-                              setInstAlamat(inst.alamat);
-                              setInstKuota(inst.kuota);
-                              setInstPembimbingNama(inst.pembimbing_nama || '');
-                              setInstPembimbingTelp(inst.pembimbing_telp || '');
-                            }}
-                            className="p-2 text-indigo-500 hover:bg-indigo-50 rounded-lg hover:text-indigo-700 transition-all border border-transparent hover:border-indigo-100"
-                            title="Edit Instansi"
+                            onClick={() => setCompaniesPage(prev => Math.max(prev - 1, 1))}
+                            disabled={currentCompaniesPage === 1}
+                            className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                           >
-                            <Edit className="w-4 h-4" />
+                            <ChevronLeft className="w-4 h-4" />
                           </button>
+                          
+                          {Array.from({ length: totalCompaniesPages }, (_, i) => i + 1).map((pg) => (
+                            <button
+                              key={pg}
+                              onClick={() => setCompaniesPage(pg)}
+                              className={`w-7 h-7 text-xs font-bold rounded-lg transition-all ${
+                                currentCompaniesPage === pg
+                                  ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
+                                  : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 font-semibold'
+                              }`}
+                            >
+                              {pg}
+                            </button>
+                          ))}
+
                           <button
-                            onClick={() => handleDeleteInstansi(inst.id)}
-                            className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg hover:text-rose-700 transition-all border border-transparent hover:border-rose-100"
-                            title="Hapus Instansi"
+                            onClick={() => setCompaniesPage(prev => Math.min(prev + 1, totalCompaniesPages))}
+                            disabled={currentCompaniesPage === totalCompaniesPages}
+                            className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <ChevronRight className="w-4 h-4" />
                           </button>
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
           )}
 
           {/* TAB 4: REPORTS REKAP NILAI */}
-          {activeTab === 'reports' && (
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-4" id="admin-reports">
-              <div className="flex justify-between items-center">
-                <h3 className="text-base font-bold text-slate-800">Laporan Rekap Nilai Siswa PKL</h3>
-                <button
-                  onClick={handleDownloadReport}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all shadow-sm shadow-indigo-600/10"
-                >
-                  <Download className="w-4 h-4" /> Ekspor Hasil PKL (.JSON)
-                </button>
-              </div>
+          {activeTab === 'reports' && (() => {
+            const reportsList = compileReportData();
+            const filteredReports = reportsList.filter(rep => {
+              const query = reportsSearch.toLowerCase();
+              const matchesQuery = rep.nama.toLowerCase().includes(query) ||
+                                   rep.nisn.toLowerCase().includes(query) ||
+                                   rep.instansi.toLowerCase().includes(query) ||
+                                   rep.pembimbing.toLowerCase().includes(query);
+              
+              const studentObj = users.find(u => u.id === rep.id);
+              const matchesClass = !reportsClassFilter || studentObj?.kelas === reportsClassFilter;
+              
+              return matchesQuery && matchesClass;
+            });
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-slate-400 font-semibold uppercase tracking-wider">
-                      <th className="pb-3 pr-4">Nama Siswa</th>
-                      <th className="pb-3 px-4">Instansi PKL</th>
-                      <th className="pb-3 px-4">Guru Pembimbing</th>
-                      <th className="pb-3 px-4">Total Kehadiran</th>
-                      <th className="pb-3 px-4">Rincian Nilai Akhir</th>
-                      <th className="pb-3 pl-4 text-right">Rerata</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50 text-slate-600">
-                    {compileReportData().map((rep) => (
-                      <tr key={rep.id} className="hover:bg-slate-50/50">
-                        <td className="py-3 pr-4">
-                          <span className="font-semibold text-slate-800 block">{rep.nama}</span>
-                          <span className="text-[10px] text-slate-400">NISN: {rep.nisn}</span>
-                        </td>
-                        <td className="py-3 px-4 font-medium text-slate-700">
-                          {rep.instansi}
-                        </td>
-                        <td className="py-3 px-4 text-slate-600">
-                          {rep.pembimbing}
-                        </td>
-                        <td className="py-3 px-4">
-                          {rep.kehadiran}
-                        </td>
-                        <td className="py-3 px-4 font-medium text-[11px] leading-normal space-y-0.5">
-                          <p className="text-emerald-700 font-semibold">Mitra: {rep.nilaiIndustri}</p>
-                          <p className="text-indigo-700 font-semibold">Sekolah: {rep.nilaiSekolah}</p>
-                        </td>
-                        <td className="py-3 pl-4 text-right text-sm font-bold text-slate-800">
-                          <span className={rep.rataRata !== 'Belum Ada' ? 'text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded' : 'text-slate-400 italic font-normal'}>
-                            {rep.rataRata}
-                          </span>
-                        </td>
+            const itemsPerPage = 8;
+            const totalReportsPages = Math.ceil(filteredReports.length / itemsPerPage) || 1;
+            const currentReportsPage = Math.min(reportsPage, totalReportsPages);
+            const paginatedReports = filteredReports.slice(
+              (currentReportsPage - 1) * itemsPerPage,
+              currentReportsPage * itemsPerPage
+            );
+
+            return (
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-4" id="admin-reports">
+                <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-slate-50 pb-2">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-800">Laporan Rekap Nilai Siswa PKL</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">Pantau seluruh perolehan nilai akhir (Sekolah & Industri) beserta rata-rata kumulatif.</p>
+                  </div>
+                  
+                  {/* Action and Filters */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                      <input
+                        type="text"
+                        placeholder="Cari nama, NISN, instansi..."
+                        className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-800 w-44 sm:w-52 shadow-sm font-medium"
+                        onChange={(e) => { setReportsSearch(e.target.value); setReportsPage(1); }}
+                        value={reportsSearch}
+                      />
+                    </div>
+
+                    <select
+                      value={reportsClassFilter}
+                      onChange={(e) => {
+                        setReportsClassFilter(e.target.value);
+                        setReportsPage(1);
+                      }}
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-700 shadow-sm font-semibold"
+                    >
+                      <option value="">Semua Kelas</option>
+                      {KELAS_OPTIONS.map((k) => (
+                        <option key={k} value={k}>{k}</option>
+                      ))}
+                    </select>
+
+                    <button
+                      onClick={handleDownloadReport}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all shadow-sm shadow-indigo-600/10 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" /> Ekspor (.JSON)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider bg-slate-50/30">
+                        <th className="py-3 px-4 text-center w-12">No</th>
+                        <th className="py-3 px-4">Nama Siswa</th>
+                        <th className="py-3 px-4">Instansi PKL</th>
+                        <th className="py-3 px-4">Guru Pembimbing</th>
+                        <th className="py-3 px-4 text-center">Total Kehadiran</th>
+                        <th className="py-3 px-4">Rincian Nilai Akhir</th>
+                        <th className="py-3 pl-4 text-right">Rerata</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50 text-slate-600">
+                      {filteredReports.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-8 text-center text-slate-400 italic">
+                            Laporan tidak ditemukan atau belum ada data.
+                          </td>
+                        </tr>
+                      ) : (
+                        paginatedReports.map((rep, idx) => {
+                          const actualIndex = (currentReportsPage - 1) * itemsPerPage + idx + 1;
+                          return (
+                            <tr key={rep.id} className="hover:bg-slate-50/50 transition-colors">
+                              <td className="py-3 px-4 text-center font-medium text-slate-400">
+                                {actualIndex}
+                              </td>
+                              <td className="py-3 pr-4">
+                                <span className="font-semibold text-slate-800 block">{rep.nama}</span>
+                                <span className="text-[10px] text-slate-400">NISN: {rep.nisn}</span>
+                              </td>
+                              <td className="py-3 px-4 font-medium text-slate-700">
+                                {rep.instansi}
+                              </td>
+                              <td className="py-3 px-4 text-slate-600">
+                                {rep.pembimbing}
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                {rep.kehadiran}
+                              </td>
+                              <td className="py-3 px-4 font-medium text-[11px] leading-normal space-y-0.5">
+                                <p className="text-emerald-700 font-semibold">Mitra: {rep.nilaiIndustri}</p>
+                                <p className="text-indigo-700 font-semibold">Sekolah: {rep.nilaiSekolah}</p>
+                              </td>
+                              <td className="py-3 pl-4 text-right text-sm font-bold text-slate-800">
+                                <span className={rep.rataRata !== 'Belum Ada' ? 'text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded' : 'text-slate-400 italic font-normal'}>
+                                  {rep.rataRata}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination Controls */}
+                {totalReportsPages > 1 && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between border-t border-slate-100 pt-4 gap-3 text-xs text-slate-500">
+                    <p className="font-medium text-slate-400">
+                      Menampilkan <span className="font-bold text-slate-700">{Math.min((currentReportsPage - 1) * itemsPerPage + 1, filteredReports.length)}</span> - <span className="font-bold text-slate-700">{Math.min(currentReportsPage * itemsPerPage, filteredReports.length)}</span> dari <span className="font-bold text-slate-700">{filteredReports.length}</span> laporan
+                    </p>
+                    
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setReportsPage(prev => Math.max(prev - 1, 1))}
+                        disabled={currentReportsPage === 1}
+                        className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      
+                      {Array.from({ length: totalReportsPages }, (_, i) => i + 1).map((pg) => (
+                        <button
+                          key={pg}
+                          onClick={() => setReportsPage(pg)}
+                          className={`w-7 h-7 text-xs font-bold rounded-lg transition-all ${
+                            currentReportsPage === pg
+                              ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
+                              : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 font-semibold'
+                          }`}
+                        >
+                          {pg}
+                        </button>
+                      ))}
+
+                      <button
+                        onClick={() => setReportsPage(prev => Math.min(prev + 1, totalReportsPages))}
+                        disabled={currentReportsPage === totalReportsPages}
+                        className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* TAB 5: CLASSES MANAGEMENT (MAIN PANE) */}
           {activeTab === 'classes' && (
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6" id="admin-classes-mgmt">
-              <div className="flex justify-between items-center mb-4">
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-4" id="admin-classes-mgmt">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
                 <div>
-                  <h3 className="text-base font-bold text-slate-800">Daftar Master Kelas ({classesList.length})</h3>
+                  <h3 className="text-base font-bold text-slate-800">Daftar Master Kelas</h3>
                   <p className="text-xs text-slate-400 mt-0.5">Master data kelas digunakan untuk memvalidasi pilihan kelas pada saat pendaftaran atau pengeditan data siswa.</p>
+                </div>
+                {/* Search Bar */}
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    placeholder="Cari kelas, jurusan..."
+                    className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-800 w-44 sm:w-56 shadow-sm font-medium"
+                    onChange={(e) => { setClassesSearch(e.target.value); setClassesPage(1); }}
+                    value={classesSearch}
+                  />
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-slate-400 font-semibold uppercase tracking-wider">
-                      <th className="pb-3 pr-4">Nama Kelas</th>
-                      <th className="pb-3 px-4">Jurusan / Kompetensi Keahlian</th>
-                      <th className="pb-3 px-4 text-center">Jumlah Siswa</th>
-                      {!isMonitoringOnly && <th className="pb-3 pl-4 text-right">Aksi</th>}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50 text-slate-600">
-                    {classesList.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="py-8 text-center text-slate-400 italic">
-                          Belum ada data kelas. Tambahkan kelas melalui panel di sebelah kanan.
-                        </td>
-                      </tr>
-                    ) : (
-                      classesList.map((cls) => {
-                        const studentCount = users.filter(u => u.role === 'siswa' && u.kelas === cls.nama_kelas).length;
-                        return (
-                          <tr key={cls.id} className="hover:bg-slate-50/50">
-                            <td className="py-3 pr-4 font-bold text-slate-800 text-sm">
-                              {cls.nama_kelas}
-                            </td>
-                            <td className="py-3 px-4 text-slate-600">
-                              {cls.jurusan}
-                            </td>
-                            <td className="py-3 px-4 text-center font-semibold text-indigo-600">
-                              {studentCount} Siswa
-                            </td>
-                            {!isMonitoringOnly && (
-                              <td className="py-3 pl-4 text-right">
-                                <div className="flex items-center justify-end gap-1.5">
-                                  <button
-                                    onClick={() => {
-                                      setEditingClassId(cls.id);
-                                      setClsNamaKelas(cls.nama_kelas);
-                                      setClsJurusan(cls.jurusan);
-                                    }}
-                                    className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold hover:underline px-2 py-1 hover:bg-indigo-50/50 rounded-md transition-all"
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteClass(cls.id, cls.nama_kelas)}
-                                    className="text-rose-600 hover:text-rose-800 p-1.5 rounded-lg hover:bg-rose-50 border border-transparent transition-all inline-flex"
-                                    title="Hapus Kelas"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </td>
-                            )}
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              {filteredClasses.length === 0 ? (
+                <div className="text-center py-12 border border-dashed border-slate-200 rounded-xl bg-slate-50">
+                  <p className="text-xs text-slate-400 italic">Kelas atau jurusan tidak ditemukan.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-slate-400 font-semibold uppercase tracking-wider">
+                          <th className="pb-3 pr-4">Nama Kelas</th>
+                          <th className="pb-3 px-4">Jurusan / Kompetensi Keahlian</th>
+                          <th className="pb-3 px-4 text-center">Jumlah Siswa</th>
+                          {!isMonitoringOnly && <th className="pb-3 pl-4 text-right">Aksi</th>}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50 text-slate-600">
+                        {(() => {
+                          const itemsPerPage = 8;
+                          const totalClassesPages = Math.ceil(filteredClasses.length / itemsPerPage) || 1;
+                          const currentClassesPage = Math.min(classesPage, totalClassesPages);
+                          const paginatedClasses = filteredClasses.slice(
+                            (currentClassesPage - 1) * itemsPerPage,
+                            currentClassesPage * itemsPerPage
+                          );
+
+                          return paginatedClasses.map((cls) => {
+                            const studentCount = users.filter(u => u.role === 'siswa' && u.kelas === cls.nama_kelas).length;
+                            return (
+                              <tr key={cls.id} className="hover:bg-slate-50/50">
+                                <td className="py-3 pr-4 font-bold text-slate-800 text-sm">
+                                  {cls.nama_kelas}
+                                </td>
+                                <td className="py-3 px-4 text-slate-600">
+                                  {cls.jurusan}
+                                </td>
+                                <td className="py-3 px-4 text-center font-semibold text-indigo-600">
+                                  {studentCount} Siswa
+                                </td>
+                                {!isMonitoringOnly && (
+                                  <td className="py-3 pl-4 text-right">
+                                    <div className="flex items-center justify-end gap-1.5">
+                                      <button
+                                        onClick={() => {
+                                          setEditingClassId(cls.id);
+                                          setClsNamaKelas(cls.nama_kelas);
+                                          setClsJurusan(cls.jurusan);
+                                        }}
+                                        className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold hover:underline px-2 py-1 hover:bg-indigo-50/50 rounded-md transition-all"
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteClass(cls.id, cls.nama_kelas)}
+                                        className="text-rose-600 hover:text-rose-800 p-1.5 rounded-lg hover:bg-rose-50 border border-transparent transition-all inline-flex"
+                                        title="Hapus Kelas"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          });
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination Controls */}
+                  {(() => {
+                    const itemsPerPage = 8;
+                    const totalClassesPages = Math.ceil(filteredClasses.length / itemsPerPage) || 1;
+                    const currentClassesPage = Math.min(classesPage, totalClassesPages);
+
+                    if (totalClassesPages <= 1) return null;
+                    return (
+                      <div className="flex flex-col sm:flex-row items-center justify-between border-t border-slate-100 pt-4 gap-3 text-xs text-slate-500">
+                        <p className="font-medium text-slate-400">
+                          Menampilkan <span className="font-bold text-slate-700">{Math.min((currentClassesPage - 1) * itemsPerPage + 1, filteredClasses.length)}</span> - <span className="font-bold text-slate-700">{Math.min(currentClassesPage * itemsPerPage, filteredClasses.length)}</span> dari <span className="font-bold text-slate-700">{filteredClasses.length}</span> kelas
+                        </p>
+                        
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => setClassesPage(prev => Math.max(prev - 1, 1))}
+                            disabled={currentClassesPage === 1}
+                            className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                          </button>
+                          
+                          {Array.from({ length: totalClassesPages }, (_, i) => i + 1).map((pg) => (
+                            <button
+                              key={pg}
+                              onClick={() => setClassesPage(pg)}
+                              className={`w-7 h-7 text-xs font-bold rounded-lg transition-all ${
+                                currentClassesPage === pg
+                                  ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
+                                  : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 font-semibold'
+                              }`}
+                            >
+                              {pg}
+                            </button>
+                          ))}
+
+                          <button
+                            onClick={() => setClassesPage(prev => Math.min(prev + 1, totalClassesPages))}
+                            disabled={currentClassesPage === totalClassesPages}
+                            className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
           )}
 
