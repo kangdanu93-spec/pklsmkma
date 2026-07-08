@@ -344,6 +344,27 @@ export function isSuperAdmin(user: PklUser | null): boolean {
   return user.role === 'admin' && (emailLower === 'kangdanu93@gmail.com' || emailLower === 'admin@simpkl.com');
 }
 
+export const INSTANSI_MAP: { [key: string]: string } = {
+  'inst-1': '8a123bc4-56de-78fa-90bc-123456789abc',
+  'inst-2': '9b123bc4-56de-78fa-90bc-123456789abc',
+  'inst-3': 'a3123bc4-56de-78fa-90bc-123456789abc'
+};
+
+export function isUuid(str: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+}
+
+export function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
 // Initialize immediately
 initializeLocalStorage();
 
@@ -534,6 +555,11 @@ export async function dbGetUsers(): Promise<{ data: PklUser[], fromSupabase: boo
 }
 
 export async function dbSaveUser(user: PklUser): Promise<{ success: boolean, fromSupabase: boolean }> {
+  // Map local mock instansi IDs to standard Supabase UUIDs
+  if (user.id_instansi && INSTANSI_MAP[user.id_instansi]) {
+    user.id_instansi = INSTANSI_MAP[user.id_instansi];
+  }
+
   const sb = getSupabaseClient();
   let fromSupabase = false;
   let success = false;
@@ -678,6 +704,11 @@ export async function dbGetInstansi(): Promise<{ data: PklInstansi[], fromSupaba
 }
 
 export async function dbSaveInstansi(instansi: PklInstansi): Promise<{ success: boolean, data?: PklInstansi, fromSupabase: boolean }> {
+  // Ensure the ID is a valid UUID before saving
+  if (!isUuid(instansi.id)) {
+    instansi.id = generateUUID();
+  }
+
   const sb = getSupabaseClient();
   let fromSupabase = false;
   let success = false;
@@ -690,8 +721,12 @@ export async function dbSaveInstansi(instansi: PklInstansi): Promise<{ success: 
         success = true;
         fromSupabase = true;
         returnedData = data as PklInstansi;
+      } else if (error) {
+        console.error('Supabase save instansi failed:', error.message, error.details, error.hint);
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error('Supabase save instansi threw exception:', e);
+    }
   }
 
   const list = localDb.get<PklInstansi>('SIM_PKL_INSTANSI');
@@ -745,6 +780,15 @@ export async function dbGetPlacements(): Promise<{ data: PklPlacement[], fromSup
 }
 
 export async function dbSavePlacement(placement: PklPlacement): Promise<{ success: boolean, data?: PklPlacement, fromSupabase: boolean }> {
+  // Ensure the ID is a valid UUID before saving
+  if (!isUuid(placement.id)) {
+    placement.id = generateUUID();
+  }
+  // Map local mock instansi IDs to standard Supabase UUIDs
+  if (placement.id_instansi && INSTANSI_MAP[placement.id_instansi]) {
+    placement.id_instansi = INSTANSI_MAP[placement.id_instansi];
+  }
+
   const sb = getSupabaseClient();
   let fromSupabase = false;
   let success = false;
@@ -757,8 +801,12 @@ export async function dbSavePlacement(placement: PklPlacement): Promise<{ succes
         success = true;
         fromSupabase = true;
         returnedData = data as PklPlacement;
+      } else if (error) {
+        console.error('Supabase save placement failed:', error.message);
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error('Supabase save placement threw exception:', e);
+    }
   }
 
   const list = localDb.get<PklPlacement>('SIM_PKL_PLACEMENTS');
@@ -790,6 +838,11 @@ export async function dbGetJournals(): Promise<{ data: PklJournal[], fromSupabas
 }
 
 export async function dbSaveJournal(journal: PklJournal): Promise<{ success: boolean, data?: PklJournal, fromSupabase: boolean }> {
+  // Ensure the ID is a valid UUID before saving
+  if (!isUuid(journal.id)) {
+    journal.id = generateUUID();
+  }
+
   const sb = getSupabaseClient();
   let fromSupabase = false;
   let success = false;
@@ -802,8 +855,12 @@ export async function dbSaveJournal(journal: PklJournal): Promise<{ success: boo
         success = true;
         fromSupabase = true;
         returnedData = data as PklJournal;
+      } else if (error) {
+        console.error('Supabase save journal failed:', error.message);
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error('Supabase save journal threw exception:', e);
+    }
   }
 
   const list = localDb.get<PklJournal>('SIM_PKL_JOURNALS');
@@ -857,6 +914,11 @@ export async function dbGetAttendance(): Promise<{ data: PklAttendance[], fromSu
 }
 
 export async function dbSaveAttendance(attendance: PklAttendance): Promise<{ success: boolean, data?: PklAttendance, fromSupabase: boolean }> {
+  // Ensure the ID is a valid UUID before saving
+  if (!isUuid(attendance.id)) {
+    attendance.id = generateUUID();
+  }
+
   const sb = getSupabaseClient();
   let fromSupabase = false;
   let success = false;
@@ -869,8 +931,12 @@ export async function dbSaveAttendance(attendance: PklAttendance): Promise<{ suc
         success = true;
         fromSupabase = true;
         returnedData = data as PklAttendance;
+      } else if (error) {
+        console.error('Supabase save attendance failed:', error.message);
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error('Supabase save attendance threw exception:', e);
+    }
   }
 
   const list = localDb.get<PklAttendance>('SIM_PKL_ATTENDANCE');
@@ -902,6 +968,11 @@ export async function dbGetEvaluations(): Promise<{ data: PklEvaluation[], fromS
 }
 
 export async function dbSaveEvaluation(evaluation: PklEvaluation): Promise<{ success: boolean, data?: PklEvaluation, fromSupabase: boolean }> {
+  // Ensure the ID is a valid UUID before saving
+  if (!isUuid(evaluation.id)) {
+    evaluation.id = generateUUID();
+  }
+
   const sb = getSupabaseClient();
   let fromSupabase = false;
   let success = false;
@@ -914,8 +985,12 @@ export async function dbSaveEvaluation(evaluation: PklEvaluation): Promise<{ suc
         success = true;
         fromSupabase = true;
         returnedData = data as PklEvaluation;
+      } else if (error) {
+        console.error('Supabase save evaluation failed:', error.message);
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error('Supabase save evaluation threw exception:', e);
+    }
   }
 
   const list = localDb.get<PklEvaluation>('SIM_PKL_EVALUATIONS');
@@ -947,6 +1022,11 @@ export async function dbGetAnnouncements(): Promise<{ data: Announcement[], from
 }
 
 export async function dbSaveAnnouncement(announcement: Announcement): Promise<{ success: boolean, data?: Announcement, fromSupabase: boolean }> {
+  // Ensure the ID is a valid UUID before saving
+  if (!isUuid(announcement.id)) {
+    announcement.id = generateUUID();
+  }
+
   const sb = getSupabaseClient();
   let fromSupabase = false;
   let success = false;
@@ -959,8 +1039,12 @@ export async function dbSaveAnnouncement(announcement: Announcement): Promise<{ 
         success = true;
         fromSupabase = true;
         returnedData = data as Announcement;
+      } else if (error) {
+        console.error('Supabase save announcement failed:', error.message);
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error('Supabase save announcement threw exception:', e);
+    }
   }
 
   const list = localDb.get<Announcement>('SIM_PKL_ANNOUNCEMENTS');
@@ -1145,6 +1229,11 @@ export async function dbGetClasses(): Promise<{ data: PklClass[], fromSupabase: 
 }
 
 export async function dbSaveClass(cls: PklClass): Promise<{ success: boolean, data?: PklClass, fromSupabase: boolean, error?: string }> {
+  // Ensure the ID is a valid UUID before saving
+  if (!isUuid(cls.id)) {
+    cls.id = generateUUID();
+  }
+
   const sb = getSupabaseClient();
   let fromSupabase = false;
   let success = false;
@@ -1153,30 +1242,17 @@ export async function dbSaveClass(cls: PklClass): Promise<{ success: boolean, da
 
   if (sb) {
     try {
-      const dbPayload = {
-        nama_kelas: cls.nama_kelas,
-        jurusan: cls.jurusan
-      };
-
-      let result;
-      if (cls.id && !cls.id.includes('class-')) {
-        // Update existing in supabase
-        result = await sb.from('pkl_classes').update(dbPayload).eq('id', cls.id).select();
-      } else {
-        // Insert new into supabase
-        result = await sb.from('pkl_classes').insert([dbPayload]).select();
-      }
-
-      if (!result.error && result.data && result.data.length > 0) {
+      const { data, error } = await sb.from('pkl_classes').upsert(cls).select().single();
+      if (!error && data) {
         success = true;
         fromSupabase = true;
-        returnedData = result.data[0] as PklClass;
-      } else if (result.error) {
-        if (result.error.code === 'P0001' || result.error.message?.includes('relation') || result.error.message?.includes('does not exist')) {
+        returnedData = data as PklClass;
+      } else if (error) {
+        if (error.code === 'P0001' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
           console.warn('Supabase table pkl_classes not found, proceeding locally');
         } else {
-          console.error('Supabase save class failed:', result.error);
-          errorMsg = result.error.message;
+          console.error('Supabase save class failed:', error);
+          errorMsg = error.message;
           fromSupabase = true;
         }
       }
@@ -1193,10 +1269,6 @@ export async function dbSaveClass(cls: PklClass): Promise<{ success: boolean, da
   if (existingIdx >= 0) {
     classes[existingIdx] = returnedData;
   } else {
-    // If it was created on Supabase, it has a proper UUID. If not, generate a local ID
-    if (!returnedData.id || returnedData.id.includes('class-')) {
-      returnedData.id = 'class-' + Math.random().toString(36).substring(2, 9);
-    }
     classes.push(returnedData);
   }
   
