@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Database, Activity, ShieldAlert, GraduationCap, Users, 
   HelpCircle, Settings, RefreshCw, BarChart3, LayoutDashboard, LogOut, CheckCircle, Flame
@@ -86,15 +86,22 @@ export default function App() {
   }, [isDbConnected]);
 
   // Robust fallback polling interval (runs every 5 seconds) for instant cross-browser/session synchronization
+  const loadGlobalDataRef = useRef<((silent?: boolean) => Promise<void>) | null>(null);
+  useEffect(() => {
+    loadGlobalDataRef.current = loadGlobalData;
+  });
+
   useEffect(() => {
     const interval = setInterval(() => {
-      loadGlobalData(true);
+      if (loadGlobalDataRef.current) {
+        loadGlobalDataRef.current(true);
+      }
     }, 5000);
 
     return () => clearInterval(interval);
   }, []);
 
-  const loadGlobalData = async (silent = false) => {
+  async function loadGlobalData(silent = false) {
     if (!silent) setGlobalLoading(true);
     try {
       // Sync Supabase credentials from full-stack server
@@ -117,6 +124,14 @@ export default function App() {
       // 2. Fetch all collections
       const resUsers = await dbGetUsers();
       setUsers(resUsers.data);
+
+      // Keep current logged-in user profile updated with the latest DB records in real-time
+      if (currentUser) {
+        const freshUser = resUsers.data.find(u => u.id === currentUser.id);
+        if (freshUser && JSON.stringify(freshUser) !== JSON.stringify(currentUser)) {
+          setCurrentUser(freshUser);
+        }
+      }
 
       if (connected && !resUsers.fromSupabase) {
         setIsUsingLocalStorageFallback(true);

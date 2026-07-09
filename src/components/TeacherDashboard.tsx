@@ -59,8 +59,15 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
       const myStudents = allUsers.data.filter(u => u.role === 'siswa' && u.id_pembimbing === teacher.id);
       setStudents(myStudents);
 
-      if (myStudents.length > 0 && !selectedStudent) {
-        setSelectedStudent(myStudents[0]);
+      if (myStudents.length > 0) {
+        if (!selectedStudent) {
+          setSelectedStudent(myStudents[0]);
+        } else {
+          const updatedSelected = myStudents.find(s => s.id === selectedStudent.id);
+          if (updatedSelected && JSON.stringify(updatedSelected) !== JSON.stringify(selectedStudent)) {
+            setSelectedStudent(updatedSelected);
+          }
+        }
       }
 
       const resJour = await dbGetJournals();
