@@ -229,7 +229,8 @@ export default function StudentDashboard({ student, instansiList, announcements,
   // Helper values
   const todayStr = new Date().toISOString().split('T')[0];
   const todayAttendance = attendanceLogs.find(a => a.tanggal === todayStr);
-  const myCompany = instansiList.find(i => i.id === student.id_instansi);
+  const activeStudent = users.find(u => u.id === student.id) || student;
+  const myCompany = instansiList.find(i => i.id === activeStudent.id_instansi);
 
   // Stats calculation
   const totalHadir = attendanceLogs.filter(a => a.status === 'hadir' && a.status_verifikasi === 'disetujui').length;
@@ -265,8 +266,8 @@ export default function StudentDashboard({ student, instansiList, announcements,
             <span className="px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-500/20 text-indigo-200 border border-indigo-500/30">
               Siswa PKL
             </span>
-            <h2 className="text-2xl font-bold mt-3 text-white">Selamat Datang, {student.nama}!</h2>
-            <p className="text-sm text-indigo-200/80 mt-1">NISN: {student.nomor_induk} | Email: {student.email}</p>
+            <h2 className="text-2xl font-bold mt-3 text-white">Selamat Datang, {activeStudent.nama}!</h2>
+            <p className="text-sm text-indigo-200/80 mt-1">NISN: {activeStudent.nomor_induk} | Email: {activeStudent.email}</p>
           </div>
           
           <div className="mt-6 pt-5 border-t border-indigo-800 flex flex-wrap gap-x-8 gap-y-3 text-sm text-indigo-200/90">
@@ -277,7 +278,7 @@ export default function StudentDashboard({ student, instansiList, announcements,
             <div>
               <span className="text-indigo-400 text-xs block uppercase font-semibold">Guru Pembimbing:</span>
               <span className="font-medium text-white">
-                {student.id_pembimbing ? 'Terplot' : 'Belum Terplotting'}
+                {activeStudent.id_pembimbing ? (users.find(u => u.id === activeStudent.id_pembimbing)?.nama || 'Terplot') : 'Belum Terplotting'}
               </span>
             </div>
             <div>
@@ -706,7 +707,7 @@ export default function StudentDashboard({ student, instansiList, announcements,
                     <li className="flex flex-col gap-1 bg-[#151520] p-2.5 rounded-lg border border-slate-800">
                       <span className="text-[10px] text-slate-400 font-bold uppercase">Guru Pembimbing</span>
                       <span className="font-semibold text-white">
-                        {student.id_pembimbing ? (users.find(u => u.id === student.id_pembimbing)?.nama || 'Terplot') : 'Menunggu Plotting Admin'}
+                        {activeStudent.id_pembimbing ? (users.find(u => u.id === activeStudent.id_pembimbing)?.nama || 'Terplot') : 'Menunggu Plotting Admin'}
                       </span>
                     </li>
                   </ul>
