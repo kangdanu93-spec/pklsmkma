@@ -564,9 +564,25 @@ export async function dbGetUsers(): Promise<{ data: PklUser[], fromSupabase: boo
 
 export async function dbSaveUser(user: PklUser): Promise<{ success: boolean, fromSupabase: boolean, error?: string }> {
   // Map local mock instansi IDs to standard Supabase UUIDs
-  if (user.id_instansi && INSTANSI_MAP[user.id_instansi]) {
-    user.id_instansi = INSTANSI_MAP[user.id_instansi];
+  let mappedInstansiId = user.id_instansi;
+  if (mappedInstansiId && INSTANSI_MAP[mappedInstansiId]) {
+    mappedInstansiId = INSTANSI_MAP[mappedInstansiId];
   }
+
+  // Create a strictly-typed sanitized record for Supabase to avoid undefined or type syntax issues (such as empty string for UUID)
+  const dbUser = {
+    id: user.id,
+    email: user.email,
+    password: user.password || 'password123',
+    nama: user.nama,
+    role: user.role,
+    nomor_induk: user.nomor_induk,
+    telepon: user.telepon,
+    kelas: user.kelas || null,
+    jurusan: user.jurusan || null,
+    id_instansi: (mappedInstansiId && mappedInstansiId.trim() !== '') ? mappedInstansiId : null,
+    id_pembimbing: (user.id_pembimbing && user.id_pembimbing.trim() !== '') ? user.id_pembimbing : null,
+  };
 
   const sb = getSupabaseClient();
   let fromSupabase = false;
@@ -575,7 +591,7 @@ export async function dbSaveUser(user: PklUser): Promise<{ success: boolean, fro
 
   if (sb) {
     try {
-      const { error } = await sb.from('pkl_users').upsert(user);
+      const { error } = await sb.from('pkl_users').upsert(dbUser);
       if (!error) {
         success = true;
         fromSupabase = true;
@@ -616,17 +632,24 @@ export async function dbSaveUser(user: PklUser): Promise<{ success: boolean, fro
 
   // Always update local storage for data alignment
   const users = localDb.get<PklUser>('SIM_PKL_USERS');
-  const index = users.findIndex(u => u.id === user.id);
+  const localUserToSave: PklUser = {
+    ...user,
+    id_instansi: dbUser.id_instansi || undefined,
+    id_pembimbing: dbUser.id_pembimbing || undefined,
+    kelas: dbUser.kelas || undefined,
+    jurusan: dbUser.jurusan || undefined,
+  };
+  const index = users.findIndex(u => u.id === localUserToSave.id);
   if (index !== -1) {
-    users[index] = user;
+    users[index] = localUserToSave;
   } else {
-    users.push(user);
+    users.push(localUserToSave);
   }
   localDb.set('SIM_PKL_USERS', users);
   
   if (!fromSupabase) success = true; // Local always succeeds
 
-  return { success, fromSupabase };
+  return { success, fromSupabase, error: errorMsg };
 }
 
 export async function dbDeleteUser(userId: string): Promise<{ success: boolean, fromSupabase: boolean, error?: string }> {
@@ -814,20 +837,33 @@ export async function dbSavePlacement(placement: PklPlacement): Promise<{ succes
   if (!isUuid(placement.id)) {
     placement.id = generateUUID();
   }
+  
+  let mappedInstansiId = placement.id_instansi;
   // Map local mock instansi IDs to standard Supabase UUIDs
-  if (placement.id_instansi && INSTANSI_MAP[placement.id_instansi]) {
-    placement.id_instansi = INSTANSI_MAP[placement.id_instansi];
+  if (mappedInstansiId && INSTANSI_MAP[mappedInstansiId]) {
+    mappedInstansiId = INSTANSI_MAP[mappedInstansiId];
   }
+
+  // Ensure id_instansi is a valid UUID before attempting to save to Supabase
+  if (mappedInstansiId && !isUuid(mappedInstansiId)) {
+    console.warn(`Invalid id_instansi UUID format: ${mappedInstansiId}`);
+    return { success: false, fromSupabase: false, error: 'Format ID Instansi tidak valid.' };
+  }
+
+  const dbPlacement: PklPlacement = {
+    ...placement,
+    id_instansi: mappedInstansiId
+  };
 
   const sb = getSupabaseClient();
   let fromSupabase = false;
   let success = false;
-  let returnedData = placement;
+  let returnedData = dbPlacement;
   let errorMsg = '';
 
   if (sb) {
     try {
-      const { data, error } = await sb.from('pkl_placements').upsert(placement).select();
+      const { data, error } = await sb.from('pkl_placements').upsert(dbPlacement).select();
       if (!error && data && data.length > 0) {
         success = true;
         fromSupabase = true;
@@ -1199,8 +1235,9 @@ export async function syncLocalDataToSupabase(): Promise<{ success: boolean, mes
     // 1. Instansi
     const instansis = localDb.get<PklInstansi>('SIM_PKL_INSTANSI');
     for (const inst of instansis) {
+      const realId = INSTANSI_MAP[inst.id] || inst.id;
       await sb.from('pkl_instansi').upsert({
-        id: inst.id.includes('inst-') ? undefined : inst.id, // let Supabase generate UUID if it is our temp mock id
+        id: realId,
         nama_instansi: inst.nama_instansi,
         alamat: inst.alamat,
         kuota: inst.kuota,
@@ -1214,6 +1251,14 @@ export async function syncLocalDataToSupabase(): Promise<{ success: boolean, mes
     // Let's also do users, placements, journals, attendance, evaluations, announcements.
     const users = localDb.get<PklUser>('SIM_PKL_USERS');
     for (const u of users) {
+      let realIdInstansi = u.id_instansi;
+      if (realIdInstansi && INSTANSI_MAP[realIdInstansi]) {
+        realIdInstansi = INSTANSI_MAP[realIdInstansi];
+      }
+      if (realIdInstansi && !isUuid(realIdInstansi)) {
+        realIdInstansi = null;
+      }
+
       await sb.from('pkl_users').upsert({
         id: u.id,
         email: u.email,
@@ -1224,17 +1269,26 @@ export async function syncLocalDataToSupabase(): Promise<{ success: boolean, mes
         telepon: u.telepon,
         kelas: u.kelas || null,
         jurusan: u.jurusan || null,
-        id_instansi: u.id_instansi?.includes('inst-') ? null : u.id_instansi,
-        id_pembimbing: u.id_pembimbing
+        id_instansi: realIdInstansi,
+        id_pembimbing: u.id_pembimbing || null
       });
     }
 
     const placements = localDb.get<PklPlacement>('SIM_PKL_PLACEMENTS');
     for (const p of placements) {
+      let realIdInstansi = p.id_instansi;
+      if (realIdInstansi && INSTANSI_MAP[realIdInstansi]) {
+        realIdInstansi = INSTANSI_MAP[realIdInstansi];
+      }
+      if (!realIdInstansi || !isUuid(realIdInstansi)) {
+        console.warn(`Skipping placement sync for ${p.id_siswa} because id_instansi is invalid: ${realIdInstansi}`);
+        continue;
+      }
+
       await sb.from('pkl_placements').upsert({
         id: p.id.includes('place-') ? undefined : p.id,
         id_siswa: p.id_siswa,
-        id_instansi: p.id_instansi.includes('inst-') ? undefined : p.id_instansi,
+        id_instansi: realIdInstansi,
         tanggal_mulai: p.tanggal_mulai,
         tanggal_selesai: p.tanggal_selesai,
         status: p.status,
