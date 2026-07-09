@@ -32,6 +32,9 @@ export default function StudentDashboard({ student, instansiList, announcements,
   const [evaluation, setEvaluation] = useState<PklEvaluation | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const activeStudent = users.find(u => u.id === student.id) || student;
+  const isApproved = (placement?.status === 'disetujui') || !!activeStudent.id_instansi;
+
   // Forms states
   const [journalDate, setJournalDate] = useState(new Date().toISOString().split('T')[0]);
   const [journalKegiatan, setJournalKegiatan] = useState('');
@@ -139,7 +142,7 @@ export default function StudentDashboard({ student, instansiList, announcements,
 
   const handleAddJournal = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!placement || placement.status !== 'disetujui') {
+    if (!isApproved) {
       alert('Anda belum memiliki tempat PKL yang disetujui untuk menulis jurnal.');
       return;
     }
@@ -169,7 +172,7 @@ export default function StudentDashboard({ student, instansiList, announcements,
 
   const handleAttendance = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!placement || placement.status !== 'disetujui') {
+    if (!isApproved) {
       alert('Anda belum memiliki tempat PKL yang disetujui untuk melakukan presensi.');
       return;
     }
@@ -229,7 +232,6 @@ export default function StudentDashboard({ student, instansiList, announcements,
   // Helper values
   const todayStr = new Date().toISOString().split('T')[0];
   const todayAttendance = attendanceLogs.find(a => a.tanggal === todayStr);
-  const activeStudent = users.find(u => u.id === student.id) || student;
   const myCompany = instansiList.find(i => i.id === activeStudent.id_instansi);
 
   // Stats calculation
@@ -284,11 +286,11 @@ export default function StudentDashboard({ student, instansiList, announcements,
             <div>
               <span className="text-indigo-400 text-xs block uppercase font-semibold">Status Penempatan:</span>
               <span className={`inline-flex items-center gap-1 font-semibold text-xs rounded px-2 py-0.5 mt-0.5 ${
-                placement?.status === 'disetujui' ? 'bg-emerald-500/20 text-emerald-300' :
+                isApproved ? 'bg-emerald-500/20 text-emerald-300' :
                 placement?.status === 'pending' ? 'bg-amber-500/20 text-amber-300' :
                 'bg-rose-500/20 text-rose-300'
               }`}>
-                {placement?.status === 'disetujui' ? 'AKTIF PKL' :
+                {isApproved ? 'AKTIF PKL' :
                  placement?.status === 'pending' ? 'MENUNGGU ACC' : 'TIDAK AKTIF / BELUM MENGAJUKAN'}
               </span>
             </div>
@@ -341,7 +343,7 @@ export default function StudentDashboard({ student, instansiList, announcements,
         <div className="lg:col-span-8 space-y-8">
           
           {/* 2. MENU PRESENSI HARIAN */}
-          {isFeatureAllowed('siswa_presensi') && placement?.status === 'disetujui' && (
+          {isFeatureAllowed('siswa_presensi') && isApproved && (
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6" id="attendance-section">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 border-b border-slate-100 pb-4">
                 <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
@@ -616,7 +618,7 @@ export default function StudentDashboard({ student, instansiList, announcements,
 
           {/* 3. INPUT JURNAL HARIAN */}
           {/* 3. MENU PENGISIAN JURNAL */}
-          {isFeatureAllowed('siswa_jurnal') && placement?.status === 'disetujui' && (
+          {isFeatureAllowed('siswa_jurnal') && isApproved && (
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6" id="journal-input-section">
               <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2 mb-4">
                 <BookOpen className="w-5 h-5 text-indigo-600" /> Tulis Jurnal Kegiatan PKL
@@ -678,7 +680,7 @@ export default function StudentDashboard({ student, instansiList, announcements,
           )}
 
           {/* 4. STATUS PENEMPATAN & PLOTTING ADMIN */}
-          {(!placement || placement.status !== 'disetujui') && (
+          {!isApproved && (
             <div className="bg-gradient-to-br from-amber-500/5 to-amber-500/10 rounded-2xl border border-amber-500/20 shadow-lg p-6 space-y-4" id="apply-placement-section">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-amber-500/10 rounded-xl border border-amber-500/20 text-amber-500">
@@ -721,7 +723,7 @@ export default function StudentDashboard({ student, instansiList, announcements,
           )}
 
           {/* 5. HISTORI JURNAL KEGIATAN */}
-          {isFeatureAllowed('siswa_jurnal') && placement?.status === 'disetujui' && (
+          {isFeatureAllowed('siswa_jurnal') && isApproved && (
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6" id="journals-list-section">
               <h3 className="text-base font-semibold text-slate-800 mb-4 flex items-center justify-between">
                 <span>Histori Jurnal Kegiatan ({journals.length})</span>
