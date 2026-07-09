@@ -6,9 +6,10 @@ import { dbGetUsers, dbGetJournals, dbSaveJournal, dbGetAttendance, dbSaveAttend
 interface TeacherDashboardProps {
   teacher: PklUser;
   instansiList: PklInstansi[];
+  refreshCounter?: number;
 }
 
-export default function TeacherDashboard({ teacher, instansiList }: TeacherDashboardProps) {
+export default function TeacherDashboard({ teacher, instansiList, refreshCounter }: TeacherDashboardProps) {
   // Menu permissions
   const [menuAccessList, setMenuAccessList] = useState<MenuAccess[]>([]);
 
@@ -47,11 +48,11 @@ export default function TeacherDashboard({ teacher, instansiList }: TeacherDashb
   const [gradeSuccess, setGradeSuccess] = useState('');
 
   useEffect(() => {
-    fetchTeacherData();
-  }, [teacher.id]);
+    fetchTeacherData(refreshCounter !== undefined && refreshCounter > 0);
+  }, [teacher.id, refreshCounter]);
 
-  const fetchTeacherData = async () => {
-    setLoading(true);
+  const fetchTeacherData = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const allUsers = await dbGetUsers();
       // Filter students assigned to this teacher

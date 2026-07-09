@@ -7,9 +7,10 @@ interface StudentDashboardProps {
   student: PklUser;
   instansiList: PklInstansi[];
   announcements: Announcement[];
+  refreshCounter?: number;
 }
 
-export default function StudentDashboard({ student, instansiList, announcements }: StudentDashboardProps) {
+export default function StudentDashboard({ student, instansiList, announcements, refreshCounter }: StudentDashboardProps) {
   // Menu permissions
   const [menuAccessList, setMenuAccessList] = useState<MenuAccess[]>([]);
 
@@ -54,8 +55,8 @@ export default function StudentDashboard({ student, instansiList, announcements 
   const [applySuccess, setApplySuccess] = useState('');
 
   useEffect(() => {
-    fetchStudentData();
-  }, [student.id]);
+    fetchStudentData(refreshCounter !== undefined && refreshCounter > 0);
+  }, [student.id, student.id_instansi, student.id_pembimbing, refreshCounter]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -98,8 +99,8 @@ export default function StudentDashboard({ student, instansiList, announcements 
     getCoordinates();
   }, []);
 
-  const fetchStudentData = async () => {
-    setLoading(true);
+  const fetchStudentData = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       // Users
       const resUsers = await dbGetUsers();

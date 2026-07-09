@@ -40,10 +40,58 @@ export default function App() {
   const [isDbConnected, setIsDbConnected] = useState(false);
   const [sbDetails, setSbDetails] = useState<{ url: string } | null>(null);
   const [isUsingLocalStorageFallback, setIsUsingLocalStorageFallback] = useState(false);
+  const [refreshCounter, setRefreshCounter] = useState(0);
 
   // Load everything on start
   useEffect(() => {
     loadGlobalData();
+  }, []);
+
+  // Sync / update currentUser profile when the global users list is updated from other sessions
+  useEffect(() => {
+    if (currentUser) {
+      const updated = users.find(u => u.id === currentUser.id);
+      if (updated && JSON.stringify(updated) !== JSON.stringify(currentUser)) {
+        setCurrentUser(updated);
+      }
+    }
+  }, [users, currentUser]);
+
+  // Robust Real-Time sync via Supabase Realtime Channel Postgres Changes subscription
+  useEffect(() => {
+    let subscription: any = null;
+
+    const setupRealtime = async () => {
+      const sb = getSupabaseClient();
+      if (sb) {
+        subscription = sb.channel('public-db-changes')
+          .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
+            console.log('SIM PKL Realtime DB change event detected:', payload);
+            loadGlobalData(true);
+          })
+          .subscribe();
+      }
+    };
+
+    setupRealtime();
+
+    return () => {
+      if (subscription) {
+        const sb = getSupabaseClient();
+        if (sb) {
+          sb.removeChannel(subscription);
+        }
+      }
+    };
+  }, [isDbConnected]);
+
+  // Robust fallback polling interval (runs every 5 seconds) for instant cross-browser/session synchronization
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadGlobalData(true);
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const loadGlobalData = async (silent = false) => {
@@ -121,6 +169,9 @@ export default function App() {
           }
         }
       }
+
+      // Signal all dashboards to refetch their internal states
+      setRefreshCounter(prev => prev + 1);
     } catch (error) {
       console.error('Gagal memuat data SIM PKL:', error);
     } finally {
@@ -282,24 +333,28 @@ export default function App() {
                 student={currentUser} 
                 instansiList={instansiList} 
                 announcements={announcements} 
+                refreshCounter={refreshCounter}
               />
             )}
             {currentUser.role === 'guru' && (
               <TeacherDashboard 
                 teacher={currentUser} 
                 instansiList={instansiList} 
+                refreshCounter={refreshCounter}
               />
             )}
             {currentUser.role === 'industri' && (
               <IndustryDashboard 
                 industry={currentUser} 
                 instansiList={instansiList} 
+                refreshCounter={refreshCounter}
               />
             )}
             {currentUser.role === 'admin' && (
               <AdminDashboard 
                 admin={currentUser} 
                 onRefreshGlobalData={onRefreshGlobalData} 
+                refreshCounter={refreshCounter}
               />
             )}
 

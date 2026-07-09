@@ -36,9 +36,10 @@ const STATIC_JURUSAN_OPTIONS = [
 interface AdminDashboardProps {
   admin: PklUser;
   onRefreshGlobalData: () => void;
+  refreshCounter?: number;
 }
 
-export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDashboardProps) {
+export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCounter }: AdminDashboardProps) {
   const isMonitoringOnly = !isSuperAdmin(admin);
   const [users, setUsers] = useState<PklUser[]>([]);
   const [instansiList, setInstansiList] = useState<PklInstansi[]>([]);
@@ -196,8 +197,8 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
   };
 
   useEffect(() => {
-    fetchAdminData();
-  }, []);
+    fetchAdminData(refreshCounter !== undefined && refreshCounter > 0);
+  }, [refreshCounter]);
 
   useEffect(() => {
     if (activeTab === 'placements') {
@@ -211,8 +212,8 @@ export default function AdminDashboard({ admin, onRefreshGlobalData }: AdminDash
     }
   }, [activeTab]);
 
-  const fetchAdminData = async () => {
-    setLoading(true);
+  const fetchAdminData = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       fetchPermissionsData();
       const resUsers = await dbGetUsers();

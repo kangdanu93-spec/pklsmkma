@@ -985,7 +985,10 @@ export async function dbSaveAttendance(attendance: PklAttendance): Promise<{ suc
 
   if (sb) {
     try {
-      const { data, error } = await sb.from('pkl_attendance').upsert(attendance).select();
+      // Clean up properties that are not present in the database table pkl_attendance
+      // such as latitude, longitude, latitude_keluar, longitude_keluar to prevent "column does not exist" error
+      const { latitude, longitude, latitude_keluar, longitude_keluar, ...dbPayload } = attendance;
+      const { data, error } = await sb.from('pkl_attendance').upsert(dbPayload).select();
       if (!error && data && data.length > 0) {
         success = true;
         fromSupabase = true;

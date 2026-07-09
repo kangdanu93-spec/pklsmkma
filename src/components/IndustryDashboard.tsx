@@ -6,9 +6,10 @@ import { dbGetUsers, dbGetJournals, dbSaveJournal, dbGetAttendance, dbSaveAttend
 interface IndustryDashboardProps {
   industry: PklUser;
   instansiList: PklInstansi[];
+  refreshCounter?: number;
 }
 
-export default function IndustryDashboard({ industry, instansiList }: IndustryDashboardProps) {
+export default function IndustryDashboard({ industry, instansiList, refreshCounter }: IndustryDashboardProps) {
   // Menu permissions
   const [menuAccessList, setMenuAccessList] = useState<MenuAccess[]>([]);
 
@@ -40,11 +41,11 @@ export default function IndustryDashboard({ industry, instansiList }: IndustryDa
   const myInstansi = instansiList.find(i => i.id === industry.id_instansi);
 
   useEffect(() => {
-    fetchIndustryData();
-  }, [industry.id_instansi]);
+    fetchIndustryData(refreshCounter !== undefined && refreshCounter > 0);
+  }, [industry.id_instansi, refreshCounter]);
 
-  const fetchIndustryData = async () => {
-    setLoading(true);
+  const fetchIndustryData = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       if (!industry.id_instansi) {
         setStudents([]);
