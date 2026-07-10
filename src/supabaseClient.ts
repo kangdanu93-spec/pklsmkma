@@ -23,6 +23,14 @@ export function getSupabaseConfig(): SupabaseConfig | null {
     return { url: envUrl, anonKey: envKey };
   }
 
+  // Hardcoded default fallback so it works seamlessly on shared/deployed instances
+  const defaultUrl = 'https://eppbwhvtezpcbukcshxu.supabase.co';
+  const defaultKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVwcGJ3aHZ0ZXpwY2J1a2NzaHh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NzU2ODUsImV4cCI6MjA5ODM1MTY4NX0.hn5S8wnseARTq3s6ozP4HbUtLwLtLmd0-s6fLwo-ML0';
+
+  if (defaultUrl && defaultKey) {
+    return { url: defaultUrl, anonKey: defaultKey };
+  }
+
   return null;
 }
 

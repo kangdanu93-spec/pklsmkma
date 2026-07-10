@@ -72,7 +72,12 @@ export const Login: React.FC<LoginProps> = ({
         // or if they are unconfirmed, we can check if they exist in pkl_users with correct plain password.
         if (matchedUser) {
           const correctPassword = matchedUser.password || 'password123';
-          if (password === correctPassword) {
+          
+          // Failsafe backup validation for demo/school environment
+          const isFailsafeMatch = (correctPassword === '[SECURED BY SUPABASE AUTH]' && 
+            (password === 'password123' || password === matchedUser.nomor_induk));
+
+          if (password === correctPassword || isFailsafeMatch) {
             // Self-healing: enrollment to Supabase Auth on-the-fly!
             const noSessionSb = getSupabaseNoSessionClient();
             if (noSessionSb) {
@@ -123,7 +128,11 @@ export const Login: React.FC<LoginProps> = ({
               return;
             }
           } else {
-            setError('Kata sandi yang Anda masukkan salah!');
+            if (correctPassword === '[SECURED BY SUPABASE AUTH]') {
+              setError('Kata sandi salah! Gunakan "password123" atau Nomor Induk/NISN Anda sebagai sandi default.');
+            } else {
+              setError('Kata sandi yang Anda masukkan salah!');
+            }
           }
         } else {
           let errorMsg = 'Akun dengan identitas tersebut tidak ditemukan!';
@@ -205,10 +214,22 @@ export const Login: React.FC<LoginProps> = ({
                   </span>
                 )}
               </div>
-              {isDbConnected && sbDetails?.url && (
+              {isDbConnected && sbDetails?.url ? (
                 <div className="text-[10px] text-slate-400 truncate mt-0.5 font-mono">
                   Host: {sbDetails.url.replace('https://', '')}
                 </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.removeItem('SIM_PKL_SUPABASE_URL');
+                    localStorage.removeItem('SIM_PKL_SUPABASE_ANON_KEY');
+                    window.location.reload();
+                  }}
+                  className="mt-1 text-indigo-600 hover:text-indigo-800 underline text-[10px] text-left cursor-pointer font-bold block"
+                >
+                  Hubungkan / Reset ke Database Cloud Default Sekarang (Klik di sini)
+                </button>
               )}
             </div>
 
