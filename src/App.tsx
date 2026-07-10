@@ -325,7 +325,13 @@ export default function App() {
         
         {/* TAB SWITCHER */}
         {!currentUser ? (
-          <Login users={users} onLoginSuccess={(u) => handleUserSessionSwitch(u.id)} />
+          <Login 
+            users={users} 
+            onLoginSuccess={(u) => handleUserSessionSwitch(u.id)}
+            isDbConnected={isDbConnected}
+            isUsingLocalStorageFallback={isUsingLocalStorageFallback}
+            sbDetails={sbDetails}
+          />
         ) : activeMenu === 'stats' ? (
           <div className="space-y-6">
             <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">

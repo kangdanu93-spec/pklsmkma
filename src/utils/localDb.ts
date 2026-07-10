@@ -541,6 +541,7 @@ export async function dbGetUsers(): Promise<{ data: PklUser[], fromSupabase: boo
               ...u,
               password: u.password || 'password123'
             }));
+            localDb.set('SIM_PKL_USERS', sanitized); // Sync local storage with latest Supabase records
             return { data: sanitized, fromSupabase: true };
           } else {
             console.warn('Supabase seeding returned no users, falling back to local storage');
@@ -552,6 +553,7 @@ export async function dbGetUsers(): Promise<{ data: PklUser[], fromSupabase: boo
           ...u,
           password: u.password || 'password123'
         }));
+        localDb.set('SIM_PKL_USERS', sanitized); // Sync local storage with latest Supabase records
         return { data: sanitized, fromSupabase: true };
       }
       console.warn('Supabase users error, falling back to local storage:', error);

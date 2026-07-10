@@ -7,9 +7,18 @@ import { dbSaveUser } from '../utils/localDb';
 interface LoginProps {
   users: PklUser[];
   onLoginSuccess: (user: PklUser) => void;
+  isDbConnected?: boolean;
+  isUsingLocalStorageFallback?: boolean;
+  sbDetails?: { url: string } | null;
 }
 
-export const Login: React.FC<LoginProps> = ({ users, onLoginSuccess }) => {
+export const Login: React.FC<LoginProps> = ({ 
+  users, 
+  onLoginSuccess,
+  isDbConnected = false,
+  isUsingLocalStorageFallback = false,
+  sbDetails = null
+}) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -117,12 +126,20 @@ export const Login: React.FC<LoginProps> = ({ users, onLoginSuccess }) => {
             setError('Kata sandi yang Anda masukkan salah!');
           }
         } else {
-          setError('Akun dengan identitas tersebut tidak ditemukan!');
+          let errorMsg = 'Akun dengan identitas tersebut tidak ditemukan!';
+          if (isUsingLocalStorageFallback) {
+            errorMsg += ' (Gagal menyinkronkan data dari cloud. Silakan periksa koneksi internet Anda atau pastikan domain Supabase tidak diblokir oleh jaringan atau ad-blocker Anda)';
+          }
+          setError(errorMsg);
         }
       } else {
         // 3. Fallback to Local Storage authentication if Supabase is offline/not set up
         if (!matchedUser) {
-          setError('Akun dengan identitas tersebut tidak ditemukan!');
+          let errorMsg = 'Akun dengan identitas tersebut tidak ditemukan!';
+          if (!isDbConnected) {
+            errorMsg += ' (Aplikasi berjalan dalam mode Offline/Local Storage. Akun baru yang ditambahkan di perangkat lain tidak akan sinkron sampai Database Cloud dihubungkan.)';
+          }
+          setError(errorMsg);
           setIsAuthenticating(false);
           return;
         }
@@ -163,6 +180,36 @@ export const Login: React.FC<LoginProps> = ({ users, onLoginSuccess }) => {
               <p className="text-sm text-slate-500 mt-1.5 leading-relaxed">
                 Silakan masuk menggunakan akun terdaftar Anda untuk mengelola bimbingan, jurnal, absensi, dan nilai PKL.
               </p>
+            </div>
+
+            {/* Database Connection Status Indicator */}
+            <div className="p-3 bg-slate-50/50 border border-slate-100 rounded-2xl text-xs font-medium text-slate-500 flex flex-col gap-1">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Koneksi Database</span>
+                {isDbConnected ? (
+                  isUsingLocalStorageFallback ? (
+                    <span className="text-amber-500 font-bold flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block animate-pulse" />
+                      Cloud Offline (Sinking Lokal)
+                    </span>
+                  ) : (
+                    <span className="text-emerald-500 font-bold flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
+                      Cloud Aktif (Sinkron)
+                    </span>
+                  )
+                ) : (
+                  <span className="text-rose-500 font-bold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />
+                    Lokal (Belum Hubung)
+                  </span>
+                )}
+              </div>
+              {isDbConnected && sbDetails?.url && (
+                <div className="text-[10px] text-slate-400 truncate mt-0.5 font-mono">
+                  Host: {sbDetails.url.replace('https://', '')}
+                </div>
+              )}
             </div>
 
             {error && (
