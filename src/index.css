@@ -1,93 +1,53 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
 @theme {
   /* Premium Typography */
   --font-sans: "Outfit", "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-serif: "Playfair Display", Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
-
-  /* Luxurious Obsidian & Gold Color System Overrides */
-  --color-slate-5: #0A0A10;
-  --color-slate-50: #07070B;       /* Deepest obsidian black background */
-  --color-slate-100: #161622;      /* Rich dark border divider */
-  --color-slate-200: #222230;      /* Secondary dark borders */
-  --color-slate-300: #333344;
-  --color-slate-400: #88889E;      /* Soft platinum subtext */
-  --color-slate-500: #9D9DB8;      /* Platinum text */
-  --color-slate-600: #B7B7D1;
-  --color-slate-700: #CECEE3;      /* Crisp text */
-  --color-slate-800: #E5E5FA;      /* Bright platinum main headings */
-  --color-slate-900: #FFFFFF;      /* Absolute white headings */
-
-  --color-white: #101016;          /* Rich dark obsidian card background */
-
-  --color-indigo-50: #1D1B14;      /* Soft golden sand background */
-  --color-indigo-100: #332D1C;     /* Gold outline accent */
-  --color-indigo-200: #B89345;
-  --color-indigo-300: #D6B25A;
-  --color-indigo-400: #E5C36E;
-  --color-indigo-500: #EBC875;     /* Champagne Gold text */
-  --color-indigo-600: #D4AF37;     /* Sovereign Gold */
-  --color-indigo-700: #B29023;     /* Deep Crown Gold */
-  --color-indigo-800: #8E7114;
-  --color-indigo-900: #181510;     /* Dark amber shadow base */
 }
 
-/* Luxury visual styling enhancements */
+/* Light, clean, and user-friendly styling */
 body {
-  background-color: var(--color-slate-50);
-  color: var(--color-slate-500);
+  background-color: #f8fafc;
+  color: #334155;
 }
 
 #main-applet {
-  background-color: var(--color-slate-50) !important;
+  background-color: #f8fafc !important;
 }
 
 input, select, textarea {
-  background-color: #151520 !important;
-  color: #FFFFFF !important;
-  border-color: #262635 !important;
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
 }
 
 input:focus, select:focus, textarea:focus {
-  border-color: #D4AF37 !important;
-  box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.15) !important;
+  border-color: #4f46e5 !important;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15) !important;
 }
 
 option {
-  background-color: #101016 !important;
-  color: #FFFFFF !important;
+  background-color: #ffffff !important;
+  color: #0f172a !important;
 }
 
-/* Gold glowing card classes */
-.luxury-card {
-  background-color: #101016;
-  border: 1px solid rgba(212, 175, 55, 0.12);
-  box-shadow: 0 4px 24px -2px rgba(0, 0, 0, 0.5);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.luxury-card:hover {
-  border-color: rgba(212, 175, 55, 0.25);
-  box-shadow: 0 10px 30px -4px rgba(212, 175, 55, 0.05), 0 4px 24px -2px rgba(0, 0, 0, 0.6);
-}
-
-/* Custom scrollbar for premium dark theme */
+/* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #07070B;
+  background: #f1f5f9;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #222230;
+  background: #cbd5e1;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #D4AF37;
+  background: #4f46e5;
 }

@@ -544,18 +544,28 @@ export default function StudentDashboard({ student, instansiList, announcements,
                             <div>
                               <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Pilih Status Kehadiran</span>
                               <div className="flex gap-4 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                                {['hadir', 'sakit', 'izin'].map((st) => (
-                                  <label key={st} className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs text-slate-700 font-bold capitalize cursor-pointer border border-transparent hover:bg-white hover:shadow-sm transition-all">
-                                    <input
-                                      type="radio"
-                                      name="attStatus"
-                                      checked={attStatus === st}
-                                      onChange={() => setAttStatus(st as any)}
-                                      className="text-indigo-600 focus:ring-indigo-500 h-4 w-4"
-                                    />
-                                    {st}
-                                  </label>
-                                ))}
+                                {['hadir', 'sakit', 'izin'].map((st) => {
+                                  const isSelected = attStatus === st;
+                                  return (
+                                    <label
+                                      key={st}
+                                      className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-bold capitalize cursor-pointer border transition-all ${
+                                        isSelected
+                                          ? 'bg-white text-indigo-700 border-indigo-200 shadow-sm'
+                                          : 'bg-transparent border-transparent text-slate-600 hover:bg-white/50'
+                                      }`}
+                                    >
+                                      <input
+                                        type="radio"
+                                        name="attStatus"
+                                        checked={isSelected}
+                                        onChange={() => setAttStatus(st as any)}
+                                        className="text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                                      />
+                                      {st}
+                                    </label>
+                                  );
+                                })}
                               </div>
                             </div>
 
@@ -681,41 +691,41 @@ export default function StudentDashboard({ student, instansiList, announcements,
 
           {/* 4. STATUS PENEMPATAN & PLOTTING ADMIN */}
           {!isApproved && (
-            <div className="bg-gradient-to-br from-amber-500/5 to-amber-500/10 rounded-2xl border border-amber-500/20 shadow-lg p-6 space-y-4" id="apply-placement-section">
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl shadow-sm p-6 space-y-4" id="apply-placement-section">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-amber-500/10 rounded-xl border border-amber-500/20 text-amber-500">
+                <div className="p-2.5 bg-amber-100 rounded-xl text-amber-700">
                   <AlertCircle className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-amber-500 font-sans tracking-wide">Informasi Pemetaan (Plotting) PKL</h3>
-                  <p className="text-xs text-slate-400">Prosedur penempatan industri & pembimbing siswa.</p>
+                  <h3 className="text-base font-bold text-amber-900 font-sans tracking-wide">Informasi Pemetaan (Plotting) PKL</h3>
+                  <p className="text-xs text-amber-700 font-medium">Prosedur penempatan industri & pembimbing siswa.</p>
                 </div>
               </div>
               
-              <div className="text-sm text-slate-300 leading-relaxed space-y-4">
+              <div className="text-sm text-slate-700 leading-relaxed space-y-4 font-medium">
                 <p>
-                  Sesuai kebijakan sekolah, seluruh proses <strong>Plotting Instansi PKL</strong> dan <strong>Guru Pembimbing</strong> dilakukan sepenuhnya secara sepihak oleh <strong>Admin / Koordinator PKL</strong> sekolah. Siswa tidak perlu mengajukan secara mandiri.
+                  Sesuai kebijakan sekolah, seluruh proses <strong className="text-amber-900 font-bold">Plotting Instansi PKL</strong> dan <strong className="text-amber-900 font-bold">Guru Pembimbing</strong> dilakukan sepenuhnya secara sepihak oleh <strong className="text-amber-900 font-bold">Admin / Koordinator PKL</strong> sekolah. Siswa tidak perlu mengajukan secara mandiri.
                 </p>
                 
-                <div className="p-4 bg-slate-900/60 rounded-xl border border-amber-500/15 space-y-2.5">
-                  <p className="font-bold text-xs text-amber-400 uppercase tracking-wider">Status Pemetaan Anda Saat Ini:</p>
-                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-300">
-                    <li className="flex flex-col gap-1 bg-[#151520] p-2.5 rounded-lg border border-slate-800">
-                      <span className="text-[10px] text-slate-400 font-bold uppercase">Instansi PKL</span>
-                      <span className="font-semibold text-white">
+                <div className="p-4 bg-white rounded-xl border border-amber-200 space-y-2.5 shadow-sm">
+                  <p className="font-bold text-xs text-amber-800 uppercase tracking-wider">Status Pemetaan Anda Saat Ini:</p>
+                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-700">
+                    <li className="flex flex-col gap-1 bg-amber-50/50 p-2.5 rounded-lg border border-amber-100">
+                      <span className="text-[10px] text-amber-700 font-bold uppercase">Instansi PKL</span>
+                      <span className="font-semibold text-slate-900">
                         {myCompany?.nama_instansi || 'Menunggu Plotting Admin'}
                       </span>
                     </li>
-                    <li className="flex flex-col gap-1 bg-[#151520] p-2.5 rounded-lg border border-slate-800">
-                      <span className="text-[10px] text-slate-400 font-bold uppercase">Guru Pembimbing</span>
-                      <span className="font-semibold text-white">
+                    <li className="flex flex-col gap-1 bg-amber-50/50 p-2.5 rounded-lg border border-amber-100">
+                      <span className="text-[10px] text-amber-700 font-bold uppercase">Guru Pembimbing</span>
+                      <span className="font-semibold text-slate-900">
                         {activeStudent.id_pembimbing ? (users.find(u => u.id === activeStudent.id_pembimbing)?.nama || 'Terplot') : 'Menunggu Plotting Admin'}
                       </span>
                     </li>
                   </ul>
                 </div>
                 
-                <p className="text-xs text-slate-400 italic">
+                <p className="text-xs text-slate-500 italic">
                   *Silakan hubungi Koordinator PKL di Ruang Hubungan Industri jika memiliki pertanyaan atau kendala terkait penempatan.
                 </p>
               </div>
