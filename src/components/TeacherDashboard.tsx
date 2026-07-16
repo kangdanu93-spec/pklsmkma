@@ -18,9 +18,10 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
   }, []);
 
   const isFeatureAllowed = (id: string): boolean => {
-    const menu = menuAccessList.find(m => m.id === id);
+    if (!Array.isArray(menuAccessList)) return true;
+    const menu = menuAccessList.find(m => m && m.id === id);
     if (!menu) return true;
-    return menu.allowed_roles.includes('guru');
+    return Array.isArray(menu.allowed_roles) && menu.allowed_roles.includes('guru');
   };
 
   const [students, setStudents] = useState<PklUser[]>([]);
@@ -109,8 +110,9 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
     if (!silent) setLoading(true);
     try {
       const allUsers = await dbGetUsers();
+      const usersList = Array.isArray(allUsers?.data) ? allUsers.data : [];
       // Filter students assigned to this teacher
-      const myStudents = allUsers.data.filter(u => u.role === 'siswa' && u.id_pembimbing === teacher.id);
+      const myStudents = usersList.filter(u => u && u.role === 'siswa' && u.id_pembimbing === teacher.id);
       setStudents(myStudents);
 
       if (myStudents.length > 0) {
@@ -125,25 +127,26 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
       }
 
       const resJour = await dbGetJournals();
-      setJournals(resJour.data);
+      setJournals(Array.isArray(resJour?.data) ? resJour.data : []);
 
       const resAtt = await dbGetAttendance();
-      setAttendanceLogs(resAtt.data);
+      setAttendanceLogs(Array.isArray(resAtt?.data) ? resAtt.data : []);
 
       const resEvals = await dbGetEvaluations();
-      setEvaluations(resEvals.data);
+      setEvaluations(Array.isArray(resEvals?.data) ? resEvals.data : []);
 
       const resAnns = await dbGetAnnouncements();
-      setAnnouncements(resAnns.data);
+      setAnnouncements(Array.isArray(resAnns?.data) ? resAnns.data : []);
 
       const resPlacements = await dbGetPlacements();
-      setPlacements(resPlacements.data);
+      setPlacements(Array.isArray(resPlacements?.data) ? resPlacements.data : []);
 
       const resMon = await dbGetTeacherMonitorings();
-      setMonitorings(resMon.data.filter(m => m.id_guru === teacher.id));
+      const monList = Array.isArray(resMon?.data) ? resMon.data : [];
+      setMonitorings(monList.filter(m => m && m.id_guru === teacher.id));
 
     } catch (e) {
-      console.error(e);
+      console.error("Error loading teacher data:", e);
     } finally {
       if (!silent) setLoading(false);
     }
@@ -329,12 +332,12 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
     }
   };
 
-  // Filter student data for view
-  const activeStudentJournals = selectedStudent ? journals.filter(j => j.id_siswa === selectedStudent.id) : [];
-  const activeStudentAttendance = selectedStudent ? attendanceLogs.filter(a => a.id_siswa === selectedStudent.id) : [];
-  const activeStudentPlacement = selectedStudent ? placements.find(p => p.id_siswa === selectedStudent.id) : null;
-  const activeStudentCompany = activeStudentPlacement ? instansiList.find(i => i.id === activeStudentPlacement.id_instansi) : null;
-  const activeStudentEvaluation = selectedStudent ? evaluations.find(e => e.id_siswa === selectedStudent.id) : null;
+  // Filter student data for view with extra defensive checks
+  const activeStudentJournals = selectedStudent ? (journals || []).filter(j => j && j.id_siswa === selectedStudent.id) : [];
+  const activeStudentAttendance = selectedStudent ? (attendanceLogs || []).filter(a => a && a.id_siswa === selectedStudent.id) : [];
+  const activeStudentPlacement = selectedStudent ? (placements || []).find(p => p && p.id_siswa === selectedStudent.id) : null;
+  const activeStudentCompany = activeStudentPlacement ? (instansiList || []).find(i => i && i.id === activeStudentPlacement.id_instansi) : null;
+  const activeStudentEvaluation = selectedStudent ? (evaluations || []).find(e => e && e.id_siswa === selectedStudent.id) : null;
 
   if (loading) {
     return (
