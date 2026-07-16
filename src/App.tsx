@@ -285,7 +285,7 @@ export default function App() {
                   <LayoutDashboard className="w-4 h-4" /> Dashboard PKL
                 </button>
               )}
-              {currentUser && isMenuAllowed('statistik_hasil') && (
+              {currentUser && currentUser.role !== 'siswa' && isMenuAllowed('statistik_hasil') && (
                 <button
                   onClick={() => setActiveMenu('stats')}
                   className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
@@ -332,7 +332,7 @@ export default function App() {
             isUsingLocalStorageFallback={isUsingLocalStorageFallback}
             sbDetails={sbDetails}
           />
-        ) : activeMenu === 'stats' ? (
+        ) : (activeMenu === 'stats' && currentUser?.role !== 'siswa') ? (
           <div className="space-y-6">
             <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
               <h2 className="text-base font-bold text-slate-800">Laporan Visual & Analitik SIM PKL</h2>

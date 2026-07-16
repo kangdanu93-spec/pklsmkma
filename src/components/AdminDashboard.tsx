@@ -134,6 +134,8 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
   const [editingTeacherMasterId, setEditingTeacherMasterId] = useState<string | null>(null);
   const [tempPembimbingId, setTempPembimbingId] = useState('');
   const [tempInstansiId, setTempInstansiId] = useState('');
+  const [tempTanggalMulai, setTempTanggalMulai] = useState('2026-07-01');
+  const [tempTanggalSelesai, setTempTanggalSelesai] = useState('2026-10-01');
   const [studentSearch, setStudentSearch] = useState('');
   const [studentClassFilter, setStudentClassFilter] = useState('');
   const [studentsPage, setStudentsPage] = useState(1);
@@ -729,8 +731,8 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
             id: existingPlace?.id || `place-${Date.now()}`,
             id_siswa: studentId,
             id_instansi: tempInstansiId,
-            tanggal_mulai: existingPlace?.tanggal_mulai || '2026-07-01',
-            tanggal_selesai: existingPlace?.tanggal_selesai || '2026-10-01',
+            tanggal_mulai: tempTanggalMulai,
+            tanggal_selesai: tempTanggalSelesai,
             status: 'disetujui',
             catatan: 'Penempatan diplot langsung oleh Admin Koordinator.'
           };
@@ -844,7 +846,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
       const company = myPlace ? instansiList.find(i => i.id === myPlace.id_instansi) : null;
       const teacherUser = student.id_pembimbing ? users.find(u => u.id === student.id_pembimbing) : null;
       
-      const attendanceLogs = attendance.filter(a => a.id_siswa === student.id && a.status_verifikasi === 'disetujui');
+      const attendanceLogs = attendance.filter(a => a.id_siswa === student.id);
       const presenceCount = attendanceLogs.filter(a => a.status === 'hadir').length;
       const sickIzinCount = attendanceLogs.filter(a => a.status === 'sakit' || a.status === 'izin').length;
 
@@ -1390,6 +1392,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                                 <th className="pb-3 pr-4">Nama Siswa</th>
                                 <th className="pb-3 px-4">Instansi PKL</th>
                                 <th className="pb-3 px-4">Guru Pembimbing</th>
+                                <th className="pb-3 px-4">Tanggal Mulai & Akhir PKL</th>
                                 <th className="pb-3 pl-4 text-right">Aksi</th>
                               </tr>
                             </thead>
@@ -1398,6 +1401,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                                 const isEditing = editingStudentId === stud.id;
                                 const company = instansiList.find(i => i.id === stud.id_instansi);
                                 const currentTeacher = teachers.find(t => t.id === stud.id_pembimbing);
+                                const studentPlacement = placements.find(p => p.id_siswa === stud.id);
                                 
                                   return (
                                     <tr key={stud.id} className="hover:bg-slate-50/50">
@@ -1439,6 +1443,38 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                                           </span>
                                         )}
                                       </td>
+                                      <td className="py-3 px-4">
+                                        {isEditing ? (
+                                          <div className="flex flex-col gap-1 max-w-[150px]">
+                                            <div className="flex items-center gap-1">
+                                              <span className="text-[9px] text-slate-400 w-8 shrink-0">Mulai:</span>
+                                              <input
+                                                type="date"
+                                                value={tempTanggalMulai}
+                                                onChange={(e) => setTempTanggalMulai(e.target.value)}
+                                                className="px-1 py-0.5 rounded border border-slate-200 focus:outline-none bg-white text-slate-800 text-[10px] w-full"
+                                              />
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                              <span className="text-[9px] text-slate-400 w-8 shrink-0">Akhir:</span>
+                                              <input
+                                                type="date"
+                                                value={tempTanggalSelesai}
+                                                onChange={(e) => setTempTanggalSelesai(e.target.value)}
+                                                className="px-1 py-0.5 rounded border border-slate-200 focus:outline-none bg-white text-slate-800 text-[10px] w-full"
+                                              />
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          studentPlacement ? (
+                                            <span className="font-semibold text-slate-700">
+                                              {new Date(studentPlacement.tanggal_mulai).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} - {new Date(studentPlacement.tanggal_selesai).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                            </span>
+                                          ) : (
+                                            <span className="text-slate-400 italic">Belum Diatur</span>
+                                          )
+                                        )}
+                                      </td>
                                       <td className="py-3 pl-4 text-right">
                                         {isEditing ? (
                                           <div className="flex gap-1 justify-end">
@@ -1462,6 +1498,9 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                                                 setEditingStudentId(stud.id);
                                                 setTempPembimbingId(stud.id_pembimbing || '');
                                                 setTempInstansiId(stud.id_instansi || '');
+                                                const existingPlace = placements.find(p => p.id_siswa === stud.id);
+                                                setTempTanggalMulai(existingPlace?.tanggal_mulai || '2026-07-01');
+                                                setTempTanggalSelesai(existingPlace?.tanggal_selesai || '2026-10-01');
                                               }}
                                               className="text-xs text-indigo-600 hover:underline font-semibold"
                                             >

@@ -214,7 +214,7 @@ export default function StudentDashboard({ student, instansiList, announcements,
         jam_masuk: currentTimeStr,
         status: attStatus,
         keterangan: attKeterangan,
-        status_verifikasi: 'pending',
+        status_verifikasi: 'disetujui',
         latitude: latitude || undefined,
         longitude: longitude || undefined,
       };
@@ -235,10 +235,10 @@ export default function StudentDashboard({ student, instansiList, announcements,
   const myCompany = instansiList.find(i => i.id === activeStudent.id_instansi);
 
   // Stats calculation
-  const totalHadir = attendanceLogs.filter(a => a.status === 'hadir' && a.status_verifikasi === 'disetujui').length;
-  const totalSakit = attendanceLogs.filter(a => a.status === 'sakit' && a.status_verifikasi === 'disetujui').length;
-  const totalIzin = attendanceLogs.filter(a => a.status === 'izin' && a.status_verifikasi === 'disetujui').length;
-  const totalPendingAtt = attendanceLogs.filter(a => a.status_verifikasi === 'pending').length;
+  const totalHadir = attendanceLogs.filter(a => a.status === 'hadir').length;
+  const totalSakit = attendanceLogs.filter(a => a.status === 'sakit').length;
+  const totalIzin = attendanceLogs.filter(a => a.status === 'izin').length;
+  const totalPendingAtt = 0; // No pending attendance as it is directly approved
   const totalJurnalVerified = journals.filter(j => j.status === 'diverifikasi').length;
 
   // Grade summary

@@ -268,13 +268,13 @@ export default function IndustryDashboard({ industry, instansiList, refreshCount
                   <div className="bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 text-center">
                     <span className="text-[9px] text-slate-400 font-semibold uppercase block">Hadir</span>
                     <strong className="text-sm text-slate-700 block">
-                      {activeStudentAttendance.filter(a => a.status === 'hadir' && a.status_verifikasi === 'disetujui').length} hari
+                      {activeStudentAttendance.filter(a => a.status === 'hadir').length} hari
                     </strong>
                   </div>
                   <div className="bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 text-center">
                     <span className="text-[9px] text-slate-400 font-semibold uppercase block">Sakit/Izin</span>
                     <strong className="text-sm text-slate-700 block">
-                      {activeStudentAttendance.filter(a => (a.status === 'sakit' || a.status === 'izin') && a.status_verifikasi === 'disetujui').length} hari
+                      {activeStudentAttendance.filter(a => a.status === 'sakit' || a.status === 'izin').length} hari
                     </strong>
                   </div>
                 </div>

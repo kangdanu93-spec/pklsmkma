@@ -43,6 +43,7 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
   // Monitoring Form State
   const [monType, setMonType] = useState<TeacherMonitoring['tipe_monitoring']>('Monitoring 1');
   const [monStudentId, setMonStudentId] = useState('');
+  const [monInstansiId, setMonInstansiId] = useState('');
   const [monDate, setMonDate] = useState(new Date().toISOString().split('T')[0]);
   const [monTime, setMonTime] = useState('');
   const [monLat, setMonLat] = useState<number | undefined>(undefined);
@@ -82,7 +83,20 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
     }
   }, [activeTab]);
 
-  // Auto-advance monitoring type to next available when student selection or monitorings list changes
+  // Filter companies that have students guided by this teacher
+  const displayInstansis = instansiList.filter(inst => {
+    return students.some(s => s.id_instansi === inst.id);
+  });
+  const finalInstansis = displayInstansis.length > 0 ? displayInstansis : instansiList;
+
+  // Initialize selected company (instansi) on mount/load
+  useEffect(() => {
+    if (finalInstansis.length > 0 && !monInstansiId) {
+      setMonInstansiId(finalInstansis[0].id);
+    }
+  }, [finalInstansis, monInstansiId]);
+
+  // Auto-advance monitoring type to next available when company selection or monitorings list changes
   useEffect(() => {
     if (activeTab === 'monitoring') {
       const monitoringTypes = [
@@ -94,8 +108,12 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
         'Penjemputan Siswa'
       ];
       
-      const usedTypes = monStudentId 
-        ? monitorings.filter(m => m.id_siswa === monStudentId).map(m => m.tipe_monitoring)
+      const targetInst = instansiList.find(i => i.id === monInstansiId);
+      const usedTypes = monInstansiId 
+        ? monitorings.filter(m => 
+            m.id_siswa === monInstansiId || 
+            (targetInst && m.nama_instansi === targetInst.nama_instansi)
+          ).map(m => m.tipe_monitoring)
         : [];
         
       const nextAvailable = monitoringTypes.find(type => !usedTypes.includes(type as any));
@@ -106,7 +124,7 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
         setMonType('Penjemputan Siswa');
       }
     }
-  }, [monStudentId, monitorings, activeTab]);
+  }, [monInstansiId, monitorings, activeTab, instansiList]);
 
   const getLiveLocation = () => {
     setMonIsGettingGPS(true);
@@ -299,17 +317,30 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
 
   const handleSaveMonitoring = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Find target student if any to populate metadata
-    const targetStudent = students.find(s => s.id === monStudentId);
-    let studCompany = '';
-    if (targetStudent) {
-      const placement = placements.find(p => p.id_siswa === targetStudent.id);
-      if (placement) {
-        const company = instansiList.find(i => i.id === placement.id_instansi);
-        studCompany = company?.nama_instansi || '';
-      }
+
+    if (!monType) {
+      alert('Pilihan Absen / Tipe Monitoring wajib dipilih!');
+      return;
     }
+    
+    if (!monInstansiId) {
+      alert('Perusahaan / Instansi Sasaran wajib dipilih!');
+      return;
+    }
+
+    if (!monPhoto) {
+      alert('Foto / Bukti Kunjungan wajib diunggah!');
+      return;
+    }
+    
+    // Find target instansi (company)
+    const targetInstansi = instansiList.find(i => i.id === monInstansiId);
+    const instansiName = targetInstansi?.nama_instansi || '';
+    
+    // Find students placed in this company to store as a reference
+    const instansiStudents = students.filter(s => s.id_instansi === monInstansiId);
+    const idSiswaList = instansiStudents.map(s => s.id).join(', ');
+    const namaSiswaList = instansiStudents.map(s => s.nama).join(', ');
 
     const newMon: TeacherMonitoring = {
       id: `mon-${Date.now()}`,
@@ -322,9 +353,9 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
       longitude: monLng,
       foto_url: monPhoto || undefined,
       catatan: monNotes || undefined,
-      id_siswa: monStudentId || undefined,
-      nama_siswa: targetStudent?.nama || undefined,
-      nama_instansi: studCompany || undefined
+      id_siswa: monInstansiId || undefined, // Storing instansi ID here
+      nama_siswa: namaSiswaList || undefined,
+      nama_instansi: instansiName || undefined
     };
 
     const res = await dbSaveTeacherMonitoring(newMon);
@@ -332,7 +363,11 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
       setMonSuccess('Absen & Laporan Monitoring berhasil disimpan!' + (res.fromSupabase ? '' : ' (Disimpan secara Lokal)'));
       setMonNotes('');
       setMonPhoto('');
-      setMonStudentId('');
+      if (finalInstansis.length > 0) {
+        setMonInstansiId(finalInstansis[0].id);
+      } else {
+        setMonInstansiId('');
+      }
       
       const now = new Date();
       setMonDate(now.toISOString().split('T')[0]);
@@ -350,7 +385,11 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
       setMonSuccess('Absen & Laporan Monitoring disimpan secara Lokal!');
       setMonNotes('');
       setMonPhoto('');
-      setMonStudentId('');
+      if (finalInstansis.length > 0) {
+        setMonInstansiId(finalInstansis[0].id);
+      } else {
+        setMonInstansiId('');
+      }
       
       const now = new Date();
       setMonDate(now.toISOString().split('T')[0]);
@@ -567,13 +606,13 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
                     <div className="bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 text-center">
                       <span className="text-[9px] text-slate-400 font-semibold uppercase block">Hadir</span>
                       <strong className="text-sm text-slate-700 block">
-                        {activeStudentAttendance.filter(a => a.status === 'hadir' && a.status_verifikasi === 'disetujui').length} hari
+                        {activeStudentAttendance.filter(a => a.status === 'hadir').length} hari
                       </strong>
                     </div>
                     <div className="bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 text-center">
                       <span className="text-[9px] text-slate-400 font-semibold uppercase block">Sakit / Izin</span>
                       <strong className="text-sm text-slate-700 block">
-                        {activeStudentAttendance.filter(a => (a.status === 'sakit' || a.status === 'izin') && a.status_verifikasi === 'disetujui').length} hari
+                        {activeStudentAttendance.filter(a => a.status === 'sakit' || a.status === 'izin').length} hari
                       </strong>
                     </div>
                     <div className="bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-100 text-center">
@@ -943,7 +982,7 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
               <form onSubmit={handleSaveMonitoring} className="space-y-4">
                 {/* 1. PILIHAN ABSEN / MONITORING TIPE */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Pilihan Absen / Tipe Monitoring</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Pilihan Absen / Tipe Monitoring <span className="text-rose-500">*</span></label>
                   <select
                     value={monType}
                     onChange={(e) => setMonType(e.target.value as any)}
@@ -957,7 +996,11 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
                       'Monitoring 5',
                       'Penjemputan Siswa'
                     ].map((type) => {
-                      const isUsed = monStudentId && monitorings.some(m => m.id_siswa === monStudentId && m.tipe_monitoring === type);
+                      const targetInst = instansiList.find(i => i.id === monInstansiId);
+                      const isUsed = monInstansiId && monitorings.some(m => 
+                        (m.id_siswa === monInstansiId || (targetInst && m.nama_instansi === targetInst.nama_instansi)) && 
+                        m.tipe_monitoring === type
+                      );
                       return (
                         <option key={type} value={type} disabled={isUsed}>
                           {type} {isUsed ? ' (Sudah Dilakukan)' : ''}
@@ -967,21 +1010,22 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
                   </select>
                 </div>
 
-                {/* 2. TARGET SISWA */}
+                {/* 2. TARGET PERUSAHAAN / INSTANSI */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Pilih Siswa Sasaran (Optional)</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Pilih Perusahaan / Instansi Sasaran <span className="text-rose-500">*</span></label>
                   <select
-                    value={monStudentId}
-                    onChange={(e) => setMonStudentId(e.target.value)}
+                    value={monInstansiId}
+                    onChange={(e) => setMonInstansiId(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none bg-white text-slate-700 font-medium"
+                    required
                   >
-                    <option value="">-- Hubungkan dengan Siswa Bimbingan (Bila Ada) --</option>
-                    {students.map((stud) => {
-                      const placement = placements.find(p => p.id_siswa === stud.id);
-                      const company = placement ? instansiList.find(i => i.id === placement.id_instansi) : null;
+                    <option value="">-- Pilih Perusahaan Tempat PKL --</option>
+                    {finalInstansis.map((inst) => {
+                      const instStudents = students.filter(s => s.id_instansi === inst.id);
+                      const studentNames = instStudents.map(s => s.nama).join(', ');
                       return (
-                        <option key={stud.id} value={stud.id}>
-                          {stud.nama} {company ? `(${company.nama_instansi})` : ''}
+                        <option key={inst.id} value={inst.id}>
+                          {inst.nama_instansi} {studentNames ? `(${studentNames})` : ''}
                         </option>
                       );
                     })}
@@ -1046,7 +1090,7 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
 
                 {/* 5. UPLOAD FOTO */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Upload Foto / Bukti Kunjungan</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Upload Foto / Bukti Kunjungan <span className="text-rose-500">*</span></label>
                   
                   {monPhoto ? (
                     <div className="relative border border-indigo-100 rounded-xl overflow-hidden bg-slate-50 max-h-48 flex items-center justify-center p-2 group">
@@ -1141,10 +1185,10 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
                             {log.tipe_monitoring}
                           </span>
                           <strong className="text-sm text-slate-800 block mt-1">
-                            {log.nama_siswa ? log.nama_siswa : 'Kunjungan Umum'}
+                            {log.nama_instansi ? log.nama_instansi : 'Kunjungan Umum'}
                           </strong>
-                          {log.nama_instansi && (
-                            <p className="text-slate-500 font-medium">Instansi: {log.nama_instansi}</p>
+                          {log.nama_siswa && (
+                            <p className="text-slate-500 font-medium">Siswa: {log.nama_siswa}</p>
                           )}
                         </div>
 

@@ -23,7 +23,7 @@ export default function StatsDashboard({ users, instansiList, evaluations, atten
   });
 
   // 2. Chart: Distribusi Absensi
-  const attendanceVerified = attendanceLogs.filter(a => a.status_verifikasi === 'disetujui');
+  const attendanceVerified = attendanceLogs.filter(a => a.status_verifikasi === 'disetujui' || a.status_verifikasi === 'pending');
   const hadirCount = attendanceVerified.filter(a => a.status === 'hadir').length;
   const sakitCount = attendanceVerified.filter(a => a.status === 'sakit').length;
   const izinCount = attendanceVerified.filter(a => a.status === 'izin').length;
