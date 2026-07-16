@@ -14,8 +14,10 @@ import {
   dbGetEvaluations, 
   dbGetAnnouncements, dbSaveAnnouncement, dbDeleteAnnouncement,
   dbGetAttendance, dbGetClasses, dbSaveClass, dbDeleteClass,
-  dbGetMenuAccess, dbSaveMenuAccess, isSuperAdmin
+  dbGetMenuAccess, dbSaveMenuAccess, isSuperAdmin,
+  syncLocalDataToSupabase
 } from '../utils/localDb';
+import { isSupabaseConnected } from '../supabaseClient';
 
 const STATIC_KELAS_OPTIONS = [
   'XII RPL 1',
@@ -944,6 +946,39 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
   return (
     <div className="space-y-8" id="admin-dashboard">
       
+      {/* SUPABASE DATA DIAGNOSTICS & SYNC BANNER */}
+      {isSupabaseConnected() && isSuperAdmin(admin) && (instansiList.length === 0 || classesList.length === 0) && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm animate-fade-in">
+          <div className="flex gap-3">
+            <div className="p-2.5 bg-amber-500 text-white rounded-xl shrink-0">
+              <Database className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-800 leading-tight">Data Perusahaan atau Kelas Kosong di Supabase</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Sistem mendeteksi bahwa data perusahaan atau master kelas Anda di database Supabase masih kosong, sehingga tidak tampil di aplikasi. Anda dapat memulihkan & mensinkronisasikan data default ke Supabase Anda secara instan dengan mengklik tombol di sebelah kanan.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={async () => {
+              const confirmSync = window.confirm('Apakah Anda ingin mensinkronisasi data default ke database Supabase Anda sekarang?');
+              if (confirmSync) {
+                const res = await syncLocalDataToSupabase();
+                alert(res.message);
+                fetchAdminData();
+                if (onRefreshGlobalData) {
+                  onRefreshGlobalData();
+                }
+              }
+            }}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+          >
+            <RefreshCw className="w-3.5 h-3.5 animate-spin-slow" /> Sinkronisasi Sekarang
+          </button>
+        </div>
+      )}
+
       {/* MONITORING ONLY / PANITIA PKL BANNER */}
       {isMonitoringOnly && (
         <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xs">

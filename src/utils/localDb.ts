@@ -545,6 +545,19 @@ export async function autoSeedSupabase(sb: any) {
         });
       }
     }
+
+    // 8. Classes
+    const { data: clsCheck, error: clsErr } = await sb.from('pkl_classes').select('id');
+    if (!clsErr && (!clsCheck || clsCheck.length === 0)) {
+      console.log('Seeding pkl_classes to Supabase...');
+      for (const cls of INITIAL_CLASSES) {
+        await sb.from('pkl_classes').upsert({
+          id: cls.id.includes('class-') ? undefined : cls.id,
+          nama_kelas: cls.nama_kelas,
+          jurusan: cls.jurusan
+        });
+      }
+    }
   } catch (error) {
     console.error('Error during auto-seeding Supabase tables:', error);
   }
@@ -760,7 +773,16 @@ export async function dbGetInstansi(): Promise<{ data: PklInstansi[], fromSupaba
     try {
       const { data, error } = await sb.from('pkl_instansi').select('*').order('nama_instansi');
       if (!error && data) {
-        return { data: data as PklInstansi[], fromSupabase: true };
+        if (data.length === 0) {
+          console.log('Supabase pkl_instansi table is empty, auto-seeding default instansi...');
+          await autoSeedSupabase(sb);
+          const { data: refetched } = await sb.from('pkl_instansi').select('*').order('nama_instansi');
+          if (refetched && refetched.length > 0) {
+            return { data: refetched as PklInstansi[], fromSupabase: true };
+          }
+        } else {
+          return { data: data as PklInstansi[], fromSupabase: true };
+        }
       }
     } catch (e) {}
   }
@@ -1404,7 +1426,16 @@ export async function dbGetClasses(): Promise<{ data: PklClass[], fromSupabase: 
     try {
       const { data, error } = await sb.from('pkl_classes').select('*').order('nama_kelas');
       if (!error && data) {
-        return { data: data as PklClass[], fromSupabase: true };
+        if (data.length === 0) {
+          console.log('Supabase pkl_classes table is empty, auto-seeding default classes...');
+          await autoSeedSupabase(sb);
+          const { data: refetched } = await sb.from('pkl_classes').select('*').order('nama_kelas');
+          if (refetched && refetched.length > 0) {
+            return { data: refetched as PklClass[], fromSupabase: true };
+          }
+        } else {
+          return { data: data as PklClass[], fromSupabase: true };
+        }
       }
     } catch (e) {}
   }
