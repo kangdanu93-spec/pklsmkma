@@ -32,6 +32,7 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
   const [evaluations, setEvaluations] = useState<PklEvaluation[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorText, setErrorText] = useState<string | null>(null);
 
   // Active Tab State
   const [activeTab, setActiveTab] = useState<'bimbingan' | 'monitoring'>('bimbingan');
@@ -108,8 +109,12 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
 
   const fetchTeacherData = async (silent = false) => {
     if (!silent) setLoading(true);
+    setErrorText(null);
     try {
-      const allUsers = await dbGetUsers();
+      const allUsers = await dbGetUsers().catch(err => {
+        console.error("Failed to fetch users:", err);
+        return { data: [] };
+      });
       const usersList = Array.isArray(allUsers?.data) ? allUsers.data : [];
       // Filter students assigned to this teacher
       const myStudents = usersList.filter(u => u && u.role === 'siswa' && u.id_pembimbing === teacher.id);
@@ -126,29 +131,30 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
         }
       }
 
-      const resJour = await dbGetJournals();
+      const resJour = await dbGetJournals().catch(() => ({ data: [] }));
       setJournals(Array.isArray(resJour?.data) ? resJour.data : []);
 
-      const resAtt = await dbGetAttendance();
+      const resAtt = await dbGetAttendance().catch(() => ({ data: [] }));
       setAttendanceLogs(Array.isArray(resAtt?.data) ? resAtt.data : []);
 
-      const resEvals = await dbGetEvaluations();
+      const resEvals = await dbGetEvaluations().catch(() => ({ data: [] }));
       setEvaluations(Array.isArray(resEvals?.data) ? resEvals.data : []);
 
-      const resAnns = await dbGetAnnouncements();
+      const resAnns = await dbGetAnnouncements().catch(() => ({ data: [] }));
       setAnnouncements(Array.isArray(resAnns?.data) ? resAnns.data : []);
 
-      const resPlacements = await dbGetPlacements();
+      const resPlacements = await dbGetPlacements().catch(() => ({ data: [] }));
       setPlacements(Array.isArray(resPlacements?.data) ? resPlacements.data : []);
 
-      const resMon = await dbGetTeacherMonitorings();
+      const resMon = await dbGetTeacherMonitorings().catch(() => ({ data: [] }));
       const monList = Array.isArray(resMon?.data) ? resMon.data : [];
       setMonitorings(monList.filter(m => m && m.id_guru === teacher.id));
 
-    } catch (e) {
+    } catch (e: any) {
       console.error("Error loading teacher data:", e);
+      setErrorText(e?.message || String(e));
     } finally {
-      if (!silent) setLoading(false);
+      setLoading(false);
     }
   };
 
@@ -344,6 +350,22 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
       <div className="flex flex-col items-center justify-center py-20 text-slate-500">
         <RefreshCw className="w-8 h-8 animate-spin text-indigo-600 mb-3" />
         <p className="text-sm">Memuat Dashboard Guru Pembimbing...</p>
+      </div>
+    );
+  }
+
+  if (errorText) {
+    return (
+      <div className="bg-red-50 border border-red-200 text-red-800 p-6 rounded-2xl max-w-xl mx-auto my-12 text-center shadow-sm">
+        <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+        <h3 className="text-base font-bold text-red-900">Gagal Memuat Data</h3>
+        <p className="text-xs text-red-600 mt-2 leading-relaxed">{errorText}</p>
+        <button 
+          onClick={() => fetchTeacherData(false)}
+          className="mt-5 px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-semibold text-xs rounded-xl cursor-pointer shadow-md transition-all border-none"
+        >
+          Coba Lagi
+        </button>
       </div>
     );
   }
