@@ -43,7 +43,8 @@ export default function SupabaseConfig({ onConfigChanged }: SupabaseConfigProps)
       { name: 'pkl_attendance', displayName: 'Presensi Kehadiran (pkl_attendance)' },
       { name: 'pkl_evaluations', displayName: 'Nilai & Evaluasi (pkl_evaluations)' },
       { name: 'pkl_announcements', displayName: 'Pengumuman (pkl_announcements)' },
-      { name: 'pkl_classes', displayName: 'Master Kelas (pkl_classes)' }
+      { name: 'pkl_classes', displayName: 'Master Kelas (pkl_classes)' },
+      { name: 'pkl_teacher_monitoring', displayName: 'Monitoring Guru (pkl_teacher_monitoring)' }
     ];
 
     const results: Array<{ table: string, status: 'ok' | 'rls_blocked' | 'missing' | 'error', details: string }> = [];
@@ -91,6 +92,12 @@ export default function SupabaseConfig({ onConfigChanged }: SupabaseConfigProps)
           writeError = error;
           if (!error) {
             await sb.from('pkl_instansi').delete().eq('id', fakeId);
+          }
+        } else if (t.name === 'pkl_teacher_monitoring') {
+          const { error } = await sb.from('pkl_teacher_monitoring').insert({ id: fakeId, id_guru: 'DIAG', nama_guru: 'DIAG', tanggal: '2026-07-16', jam_monitoring: '12:00:00', tipe_monitoring: 'Monitoring 1' });
+          writeError = error;
+          if (!error) {
+            await sb.from('pkl_teacher_monitoring').delete().eq('id', fakeId);
           }
         } else {
           // General write test fallback

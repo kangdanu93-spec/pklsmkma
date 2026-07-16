@@ -1541,7 +1541,7 @@ export async function dbSaveTeacherMonitoring(monitoring: TeacherMonitoring): Pr
         fromSupabase = true;
         returnedData = data[0] as TeacherMonitoring;
       } else if (error) {
-        if (error.code === 'P0001' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
+        if (error.code === 'P0001' || error.code === '42P01' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
           console.warn('Supabase table pkl_teacher_monitoring not found, proceeding locally');
         } else {
           console.error('Supabase save teacher monitoring failed:', error);

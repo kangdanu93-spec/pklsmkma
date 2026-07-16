@@ -76,11 +76,37 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
   useEffect(() => {
     if (activeTab === 'monitoring') {
       const now = new Date();
-      const timeString = now.toTimeString().split(' ')[0]; // HH:MM:SS
-      setMonTime(timeString);
+      setMonDate(now.toISOString().split('T')[0]);
+      setMonTime(now.toTimeString().split(' ')[0]);
       getLiveLocation();
     }
   }, [activeTab]);
+
+  // Auto-advance monitoring type to next available when student selection or monitorings list changes
+  useEffect(() => {
+    if (activeTab === 'monitoring') {
+      const monitoringTypes = [
+        'Monitoring 1',
+        'Monitoring 2',
+        'Monitoring 3',
+        'Monitoring 4',
+        'Monitoring 5',
+        'Penjemputan Siswa'
+      ];
+      
+      const usedTypes = monStudentId 
+        ? monitorings.filter(m => m.id_siswa === monStudentId).map(m => m.tipe_monitoring)
+        : [];
+        
+      const nextAvailable = monitoringTypes.find(type => !usedTypes.includes(type as any));
+      if (nextAvailable) {
+        setMonType(nextAvailable as any);
+      } else {
+        // Fallback if all are completed, default to Penjemputan Siswa or keep as is
+        setMonType('Penjemputan Siswa');
+      }
+    }
+  }, [monStudentId, monitorings, activeTab]);
 
   const getLiveLocation = () => {
     setMonIsGettingGPS(true);
@@ -303,12 +329,34 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
 
     const res = await dbSaveTeacherMonitoring(newMon);
     if (res.success) {
-      setMonSuccess('Absen & Laporan Monitoring berhasil disimpan!');
+      setMonSuccess('Absen & Laporan Monitoring berhasil disimpan!' + (res.fromSupabase ? '' : ' (Disimpan secara Lokal)'));
       setMonNotes('');
       setMonPhoto('');
       setMonStudentId('');
       
+      const now = new Date();
+      setMonDate(now.toISOString().split('T')[0]);
+      setMonTime(now.toTimeString().split(' ')[0]);
+      
       // refresh monitorings
+      const resMon = await dbGetTeacherMonitorings();
+      setMonitorings(resMon.data.filter(m => m.id_guru === teacher.id));
+      
+      setTimeout(() => setMonSuccess(''), 4000);
+    } else {
+      // If saving failed on Supabase but local saved, show warning and clear inputs
+      alert('Koneksi database cloud bermasalah: ' + (res.error || 'Unknown Error') + '\n\nData Anda telah berhasil disimpan secara lokal di browser ini.');
+      
+      setMonSuccess('Absen & Laporan Monitoring disimpan secara Lokal!');
+      setMonNotes('');
+      setMonPhoto('');
+      setMonStudentId('');
+      
+      const now = new Date();
+      setMonDate(now.toISOString().split('T')[0]);
+      setMonTime(now.toTimeString().split(' ')[0]);
+
+      // refresh monitorings (will fetch from local storage since Supabase failed or fell back)
       const resMon = await dbGetTeacherMonitorings();
       setMonitorings(resMon.data.filter(m => m.id_guru === teacher.id));
       
@@ -896,7 +944,11 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
                 {/* 1. PILIHAN ABSEN / MONITORING TIPE */}
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Pilihan Absen / Tipe Monitoring</label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <select
+                    value={monType}
+                    onChange={(e) => setMonType(e.target.value as any)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none bg-white text-slate-700 font-medium cursor-pointer"
+                  >
                     {[
                       'Monitoring 1',
                       'Monitoring 2',
@@ -905,28 +957,14 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
                       'Monitoring 5',
                       'Penjemputan Siswa'
                     ].map((type) => {
-                      const isSelected = monType === type;
+                      const isUsed = monStudentId && monitorings.some(m => m.id_siswa === monStudentId && m.tipe_monitoring === type);
                       return (
-                        <label
-                          key={type}
-                          className={`flex items-center gap-2 p-2.5 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${
-                            isSelected
-                              ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm'
-                              : 'bg-slate-50/50 border-slate-100 text-slate-600 hover:bg-slate-100'
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name="monType"
-                            checked={isSelected}
-                            onChange={() => setMonType(type as any)}
-                            className="text-indigo-600 focus:ring-indigo-500 h-4 w-4"
-                          />
-                          {type}
-                        </label>
+                        <option key={type} value={type} disabled={isUsed}>
+                          {type} {isUsed ? ' (Sudah Dilakukan)' : ''}
+                        </option>
                       );
                     })}
-                  </div>
+                  </select>
                 </div>
 
                 {/* 2. TARGET SISWA */}
@@ -956,10 +994,11 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Tanggal Kunjungan</label>
                     <input
                       type="date"
+                      readOnly
                       required
                       value={monDate}
-                      onChange={(e) => setMonDate(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none bg-white text-slate-700 font-medium"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-100 text-xs focus:outline-none bg-slate-50 text-slate-400 font-medium cursor-not-allowed"
+                      title="Tanggal terisi otomatis dan tidak dapat diubah"
                     />
                   </div>
                   <div>
@@ -968,13 +1007,14 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
                     </label>
                     <input
                       type="text"
+                      readOnly
                       required
                       placeholder="HH:MM:SS"
                       value={monTime}
-                      onChange={(e) => setMonTime(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none bg-white text-slate-700 font-medium"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-100 text-xs focus:outline-none bg-slate-50 text-slate-400 font-medium cursor-not-allowed"
+                      title="Jam terisi otomatis dan tidak dapat diubah"
                     />
-                    <span className="text-[9px] text-slate-400 mt-0.5 block italic">* Hanya jam sampai, tidak perlu jam pulang</span>
+                    <span className="text-[9px] text-slate-400 mt-0.5 block italic">* Hanya jam sampai, terisi otomatis</span>
                   </div>
                 </div>
 
