@@ -1,6 +1,6 @@
 import { getSupabaseClient, getSupabaseNoSessionClient } from '../supabaseClient';
 import { 
-  PklUser, PklInstansi, PklPlacement, PklJournal, PklAttendance, PklEvaluation, Announcement, PklClass, MenuAccess 
+  PklUser, PklInstansi, PklPlacement, PklJournal, PklAttendance, PklEvaluation, Announcement, PklClass, MenuAccess, TeacherMonitoring 
 } from '../types';
 
 // SQL migration schema to show in the UI for users to copy/paste into Supabase
@@ -109,6 +109,24 @@ CREATE TABLE IF NOT EXISTS pkl_classes (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- 9. TABEL MONITORING GURU
+CREATE TABLE IF NOT EXISTS pkl_teacher_monitoring (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id_guru TEXT NOT NULL,
+  nama_guru TEXT NOT NULL,
+  tanggal DATE NOT NULL,
+  jam_monitoring TIME NOT NULL,
+  tipe_monitoring TEXT NOT NULL,
+  latitude NUMERIC,
+  longitude NUMERIC,
+  foto_url TEXT,
+  catatan TEXT,
+  id_siswa TEXT,
+  nama_siswa TEXT,
+  nama_instansi TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 -- Nonaktifkan RLS agar aplikasi dapat membaca dan menulis data tanpa kendala Policy (untuk mode demo/sandbox)
 ALTER TABLE pkl_instansi DISABLE ROW LEVEL SECURITY;
 ALTER TABLE pkl_users DISABLE ROW LEVEL SECURITY;
@@ -118,6 +136,7 @@ ALTER TABLE pkl_attendance DISABLE ROW LEVEL SECURITY;
 ALTER TABLE pkl_evaluations DISABLE ROW LEVEL SECURITY;
 ALTER TABLE pkl_announcements DISABLE ROW LEVEL SECURITY;
 ALTER TABLE pkl_classes DISABLE ROW LEVEL SECURITY;
+ALTER TABLE pkl_teacher_monitoring DISABLE ROW LEVEL SECURITY;
 
 -- Tambahkan master kelas awal
 INSERT INTO pkl_classes (id, nama_kelas, jurusan) VALUES
@@ -227,11 +246,16 @@ function initializeLocalStorage() {
     localStorage.setItem('SIM_PKL_EVALUATIONS', JSON.stringify(INITIAL_EVALUATIONS));
     localStorage.setItem('SIM_PKL_ANNOUNCEMENTS', JSON.stringify(INITIAL_ANNOUNCEMENTS));
     localStorage.setItem('SIM_PKL_CLASSES', JSON.stringify(INITIAL_CLASSES));
+    localStorage.setItem('SIM_PKL_TEACHER_MONITORING', JSON.stringify([]));
     localStorage.setItem('SIM_PKL_INITIALIZED', 'true');
   } else {
     // Ensure classes key exists even if app was initialized previously
     if (!localStorage.getItem('SIM_PKL_CLASSES')) {
       localStorage.setItem('SIM_PKL_CLASSES', JSON.stringify(INITIAL_CLASSES));
+    }
+    // Ensure teacher monitoring key exists
+    if (!localStorage.getItem('SIM_PKL_TEACHER_MONITORING')) {
+      localStorage.setItem('SIM_PKL_TEACHER_MONITORING', JSON.stringify([]));
     }
     // Force migrate local storage to make sure standard admin and other mock users exist
     try {
@@ -1475,6 +1499,113 @@ export async function dbDeleteClass(id: string): Promise<{ success: boolean, fro
 
   const classes = localDb.get<PklClass>('SIM_PKL_CLASSES');
   localDb.set('SIM_PKL_CLASSES', classes.filter(c => c.id !== id));
+
+  if (!fromSupabase) {
+    success = true;
+  }
+
+  return { success, fromSupabase, error: errorMsg };
+}
+
+// ---------------------- MONITORING GURU ----------------------
+
+export async function dbGetTeacherMonitorings(): Promise<{ data: TeacherMonitoring[], fromSupabase: boolean }> {
+  const sb = getSupabaseClient();
+  if (sb) {
+    try {
+      const { data, error } = await sb.from('pkl_teacher_monitoring').select('*').order('tanggal', { ascending: false });
+      if (!error && data) {
+        return { data: data as TeacherMonitoring[], fromSupabase: true };
+      }
+    } catch (e) {}
+  }
+  return { data: localDb.get<TeacherMonitoring>('SIM_PKL_TEACHER_MONITORING'), fromSupabase: false };
+}
+
+export async function dbSaveTeacherMonitoring(monitoring: TeacherMonitoring): Promise<{ success: boolean, data?: TeacherMonitoring, fromSupabase: boolean, error?: string }> {
+  if (!isUuid(monitoring.id)) {
+    monitoring.id = generateUUID();
+  }
+
+  const sb = getSupabaseClient();
+  let fromSupabase = false;
+  let success = false;
+  let returnedData = monitoring;
+  let errorMsg = '';
+
+  if (sb) {
+    try {
+      const { data, error } = await sb.from('pkl_teacher_monitoring').upsert(monitoring).select();
+      if (!error && data && data.length > 0) {
+        success = true;
+        fromSupabase = true;
+        returnedData = data[0] as TeacherMonitoring;
+      } else if (error) {
+        if (error.code === 'P0001' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
+          console.warn('Supabase table pkl_teacher_monitoring not found, proceeding locally');
+        } else {
+          console.error('Supabase save teacher monitoring failed:', error);
+          errorMsg = error.message;
+          fromSupabase = true;
+        }
+      } else {
+        success = true;
+        fromSupabase = true;
+      }
+    } catch (e: any) {
+      console.error('Supabase save teacher monitoring error:', e);
+      errorMsg = e?.message || String(e);
+    }
+  }
+
+  // Update locally too
+  const monitorings = localDb.get<TeacherMonitoring>('SIM_PKL_TEACHER_MONITORING');
+  const existingIdx = monitorings.findIndex(m => m.id === monitoring.id);
+  
+  if (existingIdx >= 0) {
+    monitorings[existingIdx] = returnedData;
+  } else {
+    monitorings.push(returnedData);
+  }
+  
+  localDb.set('SIM_PKL_TEACHER_MONITORING', monitorings);
+
+  if (!fromSupabase) {
+    success = true;
+  }
+
+  return { success, data: returnedData, fromSupabase, error: errorMsg };
+}
+
+export async function dbDeleteTeacherMonitoring(id: string): Promise<{ success: boolean, fromSupabase: boolean, error?: string }> {
+  const sb = getSupabaseClient();
+  let fromSupabase = false;
+  let success = false;
+  let errorMsg = '';
+
+  if (sb) {
+    try {
+      const { error } = await sb.from('pkl_teacher_monitoring').delete().eq('id', id);
+      if (!error) {
+        success = true;
+        fromSupabase = true;
+      } else {
+        if (error.code === 'P0001' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
+          console.warn('Supabase table pkl_teacher_monitoring not found, proceeding locally');
+        } else {
+          console.error('Supabase delete teacher monitoring failed:', error);
+          errorMsg = error.message;
+          fromSupabase = true;
+        }
+      }
+    } catch (e: any) {
+      console.error('Supabase delete teacher monitoring failed:', e);
+      errorMsg = e?.message || String(e);
+    }
+  }
+
+  const monitorings = localDb.get<TeacherMonitoring>('SIM_PKL_TEACHER_MONITORING');
+  localDb.set('SIM_PKL_TEACHER_MONITORING', monitorings.filter(m => m.id !== id));
 
   if (!fromSupabase) {
     success = true;

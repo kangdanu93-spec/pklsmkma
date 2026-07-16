@@ -99,4 +99,21 @@ export interface MenuAccess {
   deskripsi: string;
 }
 
+export interface TeacherMonitoring {
+  id: string;
+  id_guru: string;
+  nama_guru: string;
+  tanggal: string;
+  jam_monitoring: string;
+  tipe_monitoring: 'Monitoring 1' | 'Monitoring 2' | 'Monitoring 3' | 'Monitoring 4' | 'Monitoring 5' | 'Penjemputan Siswa';
+  latitude?: number;
+  longitude?: number;
+  foto_url?: string;
+  catatan?: string;
+  id_siswa?: string; // Siswa yang dimonitor (optional)
+  nama_siswa?: string;
+  nama_instansi?: string;
+  created_at?: string;
+}
+
 
