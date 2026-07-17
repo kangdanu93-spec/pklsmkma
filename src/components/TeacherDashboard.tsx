@@ -980,7 +980,29 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
               </div>
 
               <form onSubmit={handleSaveMonitoring} className="space-y-4">
-                {/* 1. PILIHAN ABSEN / MONITORING TIPE */}
+                {/* 1. TARGET PERUSAHAAN / INSTANSI */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Pilih Perusahaan / Instansi Sasaran <span className="text-rose-500">*</span></label>
+                  <select
+                    value={monInstansiId}
+                    onChange={(e) => setMonInstansiId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none bg-white text-slate-700 font-medium"
+                    required
+                  >
+                    <option value="">-- Pilih Perusahaan Tempat PKL --</option>
+                    {finalInstansis.map((inst) => {
+                      const instStudents = students.filter(s => s.id_instansi === inst.id);
+                      const studentNames = instStudents.map(s => s.nama).join(', ');
+                      return (
+                        <option key={inst.id} value={inst.id}>
+                          {inst.nama_instansi} {studentNames ? `(${studentNames})` : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                {/* 2. PILIHAN ABSEN / MONITORING TIPE */}
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Pilihan Absen / Tipe Monitoring <span className="text-rose-500">*</span></label>
                   <select
@@ -1004,28 +1026,6 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
                       return (
                         <option key={type} value={type} disabled={isUsed}>
                           {type} {isUsed ? ' (Sudah Dilakukan)' : ''}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-
-                {/* 2. TARGET PERUSAHAAN / INSTANSI */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Pilih Perusahaan / Instansi Sasaran <span className="text-rose-500">*</span></label>
-                  <select
-                    value={monInstansiId}
-                    onChange={(e) => setMonInstansiId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none bg-white text-slate-700 font-medium"
-                    required
-                  >
-                    <option value="">-- Pilih Perusahaan Tempat PKL --</option>
-                    {finalInstansis.map((inst) => {
-                      const instStudents = students.filter(s => s.id_instansi === inst.id);
-                      const studentNames = instStudents.map(s => s.nama).join(', ');
-                      return (
-                        <option key={inst.id} value={inst.id}>
-                          {inst.nama_instansi} {studentNames ? `(${studentNames})` : ''}
                         </option>
                       );
                     })}
