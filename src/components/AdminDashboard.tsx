@@ -3,7 +3,7 @@ import {
   Building2, Users, FileCheck, Calendar, Star, RefreshCw, Plus, Trash2, Edit,
   UserPlus, Check, X, ClipboardList, ShieldAlert, Download, Phone, MapPin,
   FileSpreadsheet, UploadCloud, Shield, BookOpen, GraduationCap, UserCheck,
-  Settings, Megaphone, Search, ChevronLeft, ChevronRight, Database
+  Settings, Megaphone, Search, ChevronLeft, ChevronRight, Database, Printer, FileText, Image
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { PklUser, PklInstansi, PklPlacement, PklEvaluation, Announcement, UserRole, PklClass, MenuAccess } from '../types';
@@ -15,7 +15,8 @@ import {
   dbGetAnnouncements, dbSaveAnnouncement, dbDeleteAnnouncement,
   dbGetAttendance, dbGetClasses, dbSaveClass, dbDeleteClass,
   dbGetMenuAccess, dbSaveMenuAccess, isSuperAdmin,
-  syncLocalDataToSupabase
+  syncLocalDataToSupabase, dbGetTeacherMonitorings,
+  dbGetSettings, dbSaveSetting, dbResetSettings
 } from '../utils/localDb';
 import { isSupabaseConnected } from '../supabaseClient';
 
@@ -50,7 +51,20 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [attendance, setAttendance] = useState<any[]>([]);
   const [classesList, setClassesList] = useState<PklClass[]>([]);
+  const [teacherMonitorings, setTeacherMonitorings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Custom Kop Surat settings with persistence
+  const [kopAtas, setKopAtas] = useState(() => localStorage.getItem('kop_atas') || 'PEMERINTAH PROVINSI JAWA BARAT');
+  const [kopTengah, setKopTengah] = useState(() => localStorage.getItem('kop_tengah') || 'DINAS PENDIDIKAN');
+  const [kopSekolah, setKopSekolah] = useState(() => localStorage.getItem('kop_sekolah') || 'SMK NEGERI 1 KOTA BANDUNG');
+  const [kopSub, setKopSub] = useState(() => localStorage.getItem('kop_sub') || 'Bidang Keahlian: Teknologi Informasi dan Komunikasi');
+  const [kopAlamat, setKopAlamat] = useState(() => localStorage.getItem('kop_alamat') || 'Jl. Wastukencana No.12, Kec. Sumur Bandung, Kota Bandung, Jawa Barat 40117');
+  const [kopKontak, setKopKontak] = useState(() => localStorage.getItem('kop_kontak') || 'Telp: (022) 4204515 | Email: info@smkn1bandung.sch.id | Website: www.smkn1bandung.sch.id');
+  const [kopLogo, setKopLogo] = useState(() => localStorage.getItem('kop_logo') || '');
+  const [isKopModalOpen, setIsKopModalOpen] = useState(false);
+  const [isSavingKop, setIsSavingKop] = useState(false);
+  const [expandedPhotoUrl, setExpandedPhotoUrl] = useState<string | null>(null);
 
   // Active sub-tab state ('placements' | 'students' | 'teachers' | 'users' | 'companies' | 'reports' | 'classes' | 'permissions' | 'announcements')
   const [activeTab, setActiveTab] = useState<'placements' | 'students' | 'teachers' | 'users' | 'companies' | 'reports' | 'classes' | 'permissions' | 'announcements'>('placements');
@@ -158,6 +172,14 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
   const [reportsSearch, setReportsSearch] = useState('');
   const [reportsClassFilter, setReportsClassFilter] = useState('');
   const [reportsPage, setReportsPage] = useState(1);
+  const [reportSubTab, setReportSubTab] = useState<'grades' | 'student_attendance' | 'teacher_attendance'>('grades');
+  const [studAttClassFilter, setStudAttClassFilter] = useState('');
+  const [studAttStatusFilter, setStudAttStatusFilter] = useState('');
+  const [studAttMonthFilter, setStudAttMonthFilter] = useState('');
+  const [teachAttGuruFilter, setTeachAttGuruFilter] = useState('');
+  const [teachAttTypeFilter, setTeachAttTypeFilter] = useState('');
+  const [teachAttMonthFilter, setTeachAttMonthFilter] = useState('');
+  const [printViewData, setPrintViewData] = useState<{ title: string; headers: string[]; rows: any[][]; filters: string[] } | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isDragOverTeacher, setIsDragOverTeacher] = useState(false);
   const [importStatus, setImportStatus] = useState<{ success?: string; error?: string } | null>(null);
@@ -240,6 +262,20 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
 
       const resClasses = await dbGetClasses();
       setClassesList(resClasses.data);
+
+      const resMon = await dbGetTeacherMonitorings().catch(() => ({ data: [] }));
+      setTeacherMonitorings(resMon.data || []);
+
+      const resSettings = await dbGetSettings();
+      if (resSettings) {
+        if (resSettings.kop_atas) setKopAtas(resSettings.kop_atas);
+        if (resSettings.kop_tengah) setKopTengah(resSettings.kop_tengah);
+        if (resSettings.kop_sekolah) setKopSekolah(resSettings.kop_sekolah);
+        if (resSettings.kop_sub) setKopSub(resSettings.kop_sub);
+        if (resSettings.kop_alamat) setKopAlamat(resSettings.kop_alamat);
+        if (resSettings.kop_kontak) setKopKontak(resSettings.kop_kontak);
+        if (resSettings.kop_logo !== undefined) setKopLogo(resSettings.kop_logo);
+      }
 
     } catch (e) {
       console.error(e);
@@ -887,6 +923,304 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
+  };
+
+  const compileStudentAttendanceReport = () => {
+    return attendance.map(att => {
+      const student = users.find(u => u.id === att.id_siswa && u.role === 'siswa');
+      const placement = placements.find(p => p.id_siswa === att.id_siswa && p.status === 'disetujui');
+      const company = placement ? instansiList.find(i => i.id === placement.id_instansi) : null;
+      
+      return {
+        id: att.id,
+        tanggal: att.tanggal || '-',
+        nama: student?.nama || 'Siswa Tidak Dikenal',
+        nisn: student?.nomor_induk || '-',
+        kelas: student?.kelas || '-',
+        jurusan: student?.jurusan || '-',
+        instansi: company?.nama_instansi || 'Belum Penempatan',
+        jam_masuk: att.jam_masuk || '-',
+        jam_keluar: att.jam_keluar || '-',
+        status: att.status || 'alfa',
+        keterangan: att.keterangan || '-',
+        status_verifikasi: att.status_verifikasi || 'pending'
+      };
+    });
+  };
+
+  const compileTeacherMonitoringReport = () => {
+    return teacherMonitorings.map(mon => {
+      const teacher = users.find(u => u.id === mon.id_guru && u.role === 'guru');
+      return {
+        id: mon.id,
+        tanggal: mon.tanggal || '-',
+        jam: mon.jam_monitoring || '-',
+        nama_guru: mon.nama_guru || teacher?.nama || 'Guru Tidak Dikenal',
+        nip: teacher?.nomor_induk || '-',
+        instansi: mon.nama_instansi || '-',
+        tipe: mon.tipe_monitoring || '-',
+        siswa: mon.nama_siswa || '-',
+        catatan: mon.catatan || '-',
+        latitude: mon.latitude,
+        longitude: mon.longitude,
+        foto_url: mon.foto_url
+      };
+    });
+  };
+
+  const handleExportToExcel = () => {
+    if (reportSubTab === 'grades') {
+      const gradesData = compileReportData().filter(rep => {
+        const query = reportsSearch.toLowerCase();
+        const matchesQuery = rep.nama.toLowerCase().includes(query) ||
+                             rep.nisn.toLowerCase().includes(query) ||
+                             rep.instansi.toLowerCase().includes(query) ||
+                             rep.pembimbing.toLowerCase().includes(query);
+        
+        const studentObj = users.find(u => u.id === rep.id);
+        const matchesClass = !reportsClassFilter || studentObj?.kelas === reportsClassFilter;
+        return matchesQuery && matchesClass;
+      });
+
+      const worksheetData = gradesData.map((d, index) => ({
+        'No': index + 1,
+        'Nama Siswa': d.nama,
+        'NISN': d.nisn,
+        'Instansi Mitra': d.instansi,
+        'Guru Pembimbing': d.pembimbing,
+        'Total Kehadiran': d.kehadiran,
+        'Nilai Industri': d.nilaiIndustri,
+        'Nilai Sekolah': d.nilaiSekolah,
+        'Nilai Rerata': d.rataRata
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Rekap Nilai Akhir');
+      XLSX.writeFile(workbook, `Rekap_Nilai_PKL_${new Date().getFullYear()}.xlsx`);
+    } 
+    else if (reportSubTab === 'student_attendance') {
+      const studentAttendanceReports = compileStudentAttendanceReport();
+      const filteredStudentAttendance = studentAttendanceReports.filter(att => {
+        const query = reportsSearch.toLowerCase();
+        const matchesQuery = att.nama.toLowerCase().includes(query) ||
+                             att.nisn.toLowerCase().includes(query) ||
+                             att.instansi.toLowerCase().includes(query);
+        const matchesClass = !studAttClassFilter || att.kelas === studAttClassFilter;
+        const matchesStatus = !studAttStatusFilter || att.status === studAttStatusFilter;
+        let matchesMonth = true;
+        if (studAttMonthFilter) {
+          const month = att.tanggal.split('-')[1];
+          matchesMonth = month === studAttMonthFilter;
+        }
+        return matchesQuery && matchesClass && matchesStatus && matchesMonth;
+      });
+
+      const worksheetData = filteredStudentAttendance.map((d, index) => ({
+        'No': index + 1,
+        'Tanggal': d.tanggal,
+        'Nama Siswa': d.nama,
+        'NISN': d.nisn,
+        'Kelas': d.kelas,
+        'Jurusan': d.jurusan,
+        'Instansi Mitra': d.instansi,
+        'Jam Masuk': d.jam_masuk,
+        'Jam Keluar': d.jam_keluar,
+        'Status Kehadiran': d.status.toUpperCase(),
+        'Keterangan': d.keterangan,
+        'Status Verifikasi': d.status_verifikasi
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Absensi Siswa');
+      XLSX.writeFile(workbook, `Laporan_Absensi_Siswa_PKL_${new Date().getFullYear()}.xlsx`);
+    } 
+    else if (reportSubTab === 'teacher_attendance') {
+      const teacherMonitoringReports = compileTeacherMonitoringReport();
+      const filteredTeacherMonitoring = teacherMonitoringReports.filter(mon => {
+        const query = reportsSearch.toLowerCase();
+        const matchesQuery = mon.nama_guru.toLowerCase().includes(query) ||
+                             mon.instansi.toLowerCase().includes(query) ||
+                             mon.siswa.toLowerCase().includes(query);
+        const matchesGuru = !teachAttGuruFilter || mon.nama_guru === teachAttGuruFilter;
+        const matchesType = !teachAttTypeFilter || mon.tipe === teachAttTypeFilter;
+        let matchesMonth = true;
+        if (teachAttMonthFilter) {
+          const month = mon.tanggal.split('-')[1];
+          matchesMonth = month === teachAttMonthFilter;
+        }
+        return matchesQuery && matchesGuru && matchesType && matchesMonth;
+      });
+
+      const worksheetData = filteredTeacherMonitoring.map((d, index) => ({
+        'No': index + 1,
+        'Tanggal': d.tanggal,
+        'Jam Kunjungan': d.jam,
+        'Nama Guru': d.nama_guru,
+        'NIP/NUPTK': d.nip,
+        'Tujuan Instansi': d.instansi,
+        'Tipe Monitoring': d.tipe,
+        'Siswa Yang Dimonitor': d.siswa,
+        'Catatan / Hasil Kunjungan': d.catatan
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Monitoring Guru');
+      XLSX.writeFile(workbook, `Laporan_Monitoring_Guru_PKL_${new Date().getFullYear()}.xlsx`);
+    }
+  };
+
+  const handlePrintReport = () => {
+    let title = '';
+    let headers: string[] = [];
+    let rows: any[][] = [];
+    let filters: string[] = [];
+
+    if (reportSubTab === 'grades') {
+      title = 'LAPORAN REKAPITULASI EVALUASI & NILAI AKHIR SISWA PKL';
+      headers = ['No', 'Nama Siswa', 'NISN', 'Instansi Tempat PKL', 'Guru Pembimbing', 'Kehadiran', 'Nilai Industri', 'Nilai Sekolah', 'Rerata'];
+      
+      const gradesData = compileReportData().filter(rep => {
+        const query = reportsSearch.toLowerCase();
+        const matchesQuery = rep.nama.toLowerCase().includes(query) ||
+                             rep.nisn.toLowerCase().includes(query) ||
+                             rep.instansi.toLowerCase().includes(query) ||
+                             rep.pembimbing.toLowerCase().includes(query);
+        
+        const studentObj = users.find(u => u.id === rep.id);
+        const matchesClass = !reportsClassFilter || studentObj?.kelas === reportsClassFilter;
+        return matchesQuery && matchesClass;
+      });
+
+      filters = [
+        `Kelas: ${reportsClassFilter || 'Semua Kelas'}`,
+        `Tahun Ajaran: ${new Date().getFullYear()}/${new Date().getFullYear() + 1}`
+      ];
+
+      rows = gradesData.map((d, index) => [
+        index + 1,
+        d.nama,
+        d.nisn,
+        d.instansi,
+        d.pembimbing,
+        d.kehadiran,
+        d.nilaiIndustri,
+        d.nilaiSekolah,
+        d.rataRata
+      ]);
+    } 
+    else if (reportSubTab === 'student_attendance') {
+      title = 'LAPORAN REKAPITULASI ABSENSI DAN KEHADIRAN SISWA PKL';
+      headers = ['No', 'Tanggal', 'Nama Siswa', 'NISN', 'Kelas', 'Instansi PKL', 'Masuk', 'Keluar', 'Status', 'Keterangan'];
+      
+      const studentAttendanceReports = compileStudentAttendanceReport();
+      const filteredStudentAttendance = studentAttendanceReports.filter(att => {
+        const query = reportsSearch.toLowerCase();
+        const matchesQuery = att.nama.toLowerCase().includes(query) ||
+                             att.nisn.toLowerCase().includes(query) ||
+                             att.instansi.toLowerCase().includes(query);
+        const matchesClass = !studAttClassFilter || att.kelas === studAttClassFilter;
+        const matchesStatus = !studAttStatusFilter || att.status === studAttStatusFilter;
+        let matchesMonth = true;
+        if (studAttMonthFilter) {
+          const month = att.tanggal.split('-')[1];
+          matchesMonth = month === studAttMonthFilter;
+        }
+        return matchesQuery && matchesClass && matchesStatus && matchesMonth;
+      });
+
+      const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+      const monthLabel = studAttMonthFilter ? monthNames[parseInt(studAttMonthFilter) - 1] : 'Semua Bulan';
+
+      filters = [
+        `Kelas: ${studAttClassFilter || 'Semua Kelas'}`,
+        `Bulan: ${monthLabel}`,
+        `Status: ${studAttStatusFilter ? studAttStatusFilter.toUpperCase() : 'Semua Status'}`
+      ];
+
+      rows = filteredStudentAttendance.map((d, index) => [
+        index + 1,
+        d.tanggal,
+        d.nama,
+        d.nisn,
+        d.kelas,
+        d.instansi,
+        d.jam_masuk,
+        d.jam_keluar,
+        d.status.toUpperCase(),
+        d.keterangan
+      ]);
+    } 
+    else if (reportSubTab === 'teacher_attendance') {
+      title = 'LAPORAN REKAPITULASI KUNJUNGAN & MONITORING GURU PKL';
+      headers = ['No', 'Tanggal', 'Waktu', 'Nama Guru', 'NIP/NUPTK', 'Tujuan Instansi', 'Tipe Monitoring', 'Siswa Dimonitor', 'Catatan / Hasil', 'Koordinat GPS', 'Foto Bukti'];
+      
+      const teacherMonitoringReports = compileTeacherMonitoringReport();
+      const filteredTeacherMonitoring = teacherMonitoringReports.filter(mon => {
+        const query = reportsSearch.toLowerCase();
+        const matchesQuery = mon.nama_guru.toLowerCase().includes(query) ||
+                             mon.instansi.toLowerCase().includes(query) ||
+                             mon.siswa.toLowerCase().includes(query);
+        const matchesGuru = !teachAttGuruFilter || mon.nama_guru === teachAttGuruFilter;
+        const matchesType = !teachAttTypeFilter || mon.tipe === teachAttTypeFilter;
+        let matchesMonth = true;
+        if (teachAttMonthFilter) {
+          const month = mon.tanggal.split('-')[1];
+          matchesMonth = month === teachAttMonthFilter;
+        }
+        return matchesQuery && matchesGuru && matchesType && matchesMonth;
+      });
+
+      const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+      const monthLabel = teachAttMonthFilter ? monthNames[parseInt(teachAttMonthFilter) - 1] : 'Semua Bulan';
+
+      filters = [
+        `Guru: ${teachAttGuruFilter || 'Semua Guru'}`,
+        `Bulan: ${monthLabel}`,
+        `Tipe: ${teachAttTypeFilter || 'Semua Tipe Monitoring'}`
+      ];
+
+      rows = filteredTeacherMonitoring.map((d, index) => [
+        index + 1,
+        d.tanggal,
+        d.jam,
+        d.nama_guru,
+        d.nip,
+        d.instansi,
+        d.tipe,
+        d.siswa,
+        d.catatan,
+        d.latitude && d.longitude ? (
+          <div className="flex flex-col items-center">
+            <span className="font-mono text-[9px]">{d.latitude.toFixed(5)}, {d.longitude.toFixed(5)}</span>
+            <a 
+              href={`https://www.google.com/maps?q=${d.latitude},${d.longitude}`} 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="text-indigo-600 underline text-[8px] print:hidden"
+            >
+              Peta
+            </a>
+          </div>
+        ) : '-',
+        d.foto_url ? (
+          <img 
+            src={d.foto_url} 
+            alt="Foto" 
+            className="w-12 h-12 object-cover border border-slate-300 rounded mx-auto" 
+            referrerPolicy="no-referrer"
+          />
+        ) : '-'
+      ]);
+    }
+
+    setPrintViewData({ title, headers, rows, filters });
+    
+    setTimeout(() => {
+      window.print();
+    }, 500);
   };
 
   const teachers = users.filter(u => u.role === 'guru');
@@ -2724,6 +3058,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
 
           {/* TAB 4: REPORTS REKAP NILAI */}
           {activeTab === 'reports' && (() => {
+            // Compile datasets based on selected sub-tab
             const reportsList = compileReportData();
             const filteredReports = reportsList.filter(rep => {
               const query = reportsSearch.toLowerCase();
@@ -2738,121 +3073,503 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
               return matchesQuery && matchesClass;
             });
 
+            const studentAttendanceReports = compileStudentAttendanceReport();
+            const filteredStudentAttendance = studentAttendanceReports.filter(att => {
+              const query = reportsSearch.toLowerCase();
+              const matchesQuery = att.nama.toLowerCase().includes(query) ||
+                                   att.nisn.toLowerCase().includes(query) ||
+                                   att.instansi.toLowerCase().includes(query);
+              const matchesClass = !studAttClassFilter || att.kelas === studAttClassFilter;
+              const matchesStatus = !studAttStatusFilter || att.status === studAttStatusFilter;
+              
+              let matchesMonth = true;
+              if (studAttMonthFilter) {
+                const month = att.tanggal.split('-')[1];
+                matchesMonth = month === studAttMonthFilter;
+              }
+              
+              return matchesQuery && matchesClass && matchesStatus && matchesMonth;
+            });
+
+            const teacherMonitoringReports = compileTeacherMonitoringReport();
+            const filteredTeacherMonitoring = teacherMonitoringReports.filter(mon => {
+              const query = reportsSearch.toLowerCase();
+              const matchesQuery = mon.nama_guru.toLowerCase().includes(query) ||
+                                   mon.instansi.toLowerCase().includes(query) ||
+                                   mon.siswa.toLowerCase().includes(query);
+              const matchesGuru = !teachAttGuruFilter || mon.nama_guru === teachAttGuruFilter;
+              const matchesType = !teachAttTypeFilter || mon.tipe === teachAttTypeFilter;
+              
+              let matchesMonth = true;
+              if (teachAttMonthFilter) {
+                const month = mon.tanggal.split('-')[1];
+                matchesMonth = month === teachAttMonthFilter;
+              }
+              
+              return matchesQuery && matchesGuru && matchesType && matchesMonth;
+            });
+
+            // Select active list
+            const activeList = 
+              reportSubTab === 'grades' ? filteredReports :
+              reportSubTab === 'student_attendance' ? filteredStudentAttendance :
+              filteredTeacherMonitoring;
+
             const itemsPerPage = 8;
-            const totalReportsPages = Math.ceil(filteredReports.length / itemsPerPage) || 1;
+            const totalReportsPages = Math.ceil(activeList.length / itemsPerPage) || 1;
             const currentReportsPage = Math.min(reportsPage, totalReportsPages);
-            const paginatedReports = filteredReports.slice(
+            const paginatedItems = activeList.slice(
               (currentReportsPage - 1) * itemsPerPage,
               currentReportsPage * itemsPerPage
             );
 
+            const uniqueTeachersList = Array.from(new Set(users.filter(u => u.role === 'guru').map(t => t.nama)));
+
             return (
               <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-4" id="admin-reports">
-                <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-slate-50 pb-2">
+                {/* Header Section */}
+                <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-slate-100 pb-4">
                   <div>
-                    <h3 className="text-base font-bold text-slate-800">Laporan Rekap Nilai Siswa PKL</h3>
-                    <p className="text-xs text-slate-400 mt-0.5">Pantau seluruh perolehan nilai akhir (Sekolah & Industri) beserta rata-rata kumulatif.</p>
+                    <h3 className="text-base font-bold text-slate-800">Laporan & Rekapitulasi PKL</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">Hasilkan, saring, cetak, dan ekspor seluruh laporan absensi siswa, kunjungan monitoring guru, dan rekapitulasi nilai akhir secara langsung.</p>
                   </div>
                   
-                  {/* Action and Filters */}
+                  {/* Action Buttons */}
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="relative">
-                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                      <input
-                        type="text"
-                        placeholder="Cari nama, NISN, instansi..."
-                        className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-800 w-44 sm:w-52 shadow-sm font-medium"
-                        onChange={(e) => { setReportsSearch(e.target.value); setReportsPage(1); }}
-                        value={reportsSearch}
-                      />
-                    </div>
+                    <button
+                      onClick={() => setIsKopModalOpen(true)}
+                      className="px-3.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all shadow-xs border border-amber-200 cursor-pointer"
+                    >
+                      <Settings className="w-3.5 h-3.5 text-amber-600" /> Atur Kop Surat
+                    </button>
+                    <button
+                      onClick={handlePrintReport}
+                      className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-slate-500" /> Cetak (PDF)
+                    </button>
+                    <button
+                      onClick={handleExportToExcel}
+                      className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all shadow-xs shadow-indigo-600/10 cursor-pointer"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5" /> Ekspor Excel
+                    </button>
+                  </div>
+                </div>
 
+                {/* Sub-Tabs Selector */}
+                <div className="flex border-b border-slate-100 gap-4 pt-1">
+                  <button
+                    onClick={() => { setReportSubTab('grades'); setReportsPage(1); }}
+                    className={`pb-3 text-xs font-bold transition-all relative ${reportSubTab === 'grades' ? 'text-indigo-600 border-b-2 border-indigo-600 font-extrabold' : 'text-slate-400 hover:text-slate-600 font-semibold'}`}
+                  >
+                    Rekap Nilai Siswa
+                  </button>
+                  <button
+                    onClick={() => { setReportSubTab('student_attendance'); setReportsPage(1); }}
+                    className={`pb-3 text-xs font-bold transition-all relative ${reportSubTab === 'student_attendance' ? 'text-indigo-600 border-b-2 border-indigo-600 font-extrabold' : 'text-slate-400 hover:text-slate-600 font-semibold'}`}
+                  >
+                    Laporan Absensi Siswa
+                  </button>
+                  <button
+                    onClick={() => { setReportSubTab('teacher_attendance'); setReportsPage(1); }}
+                    className={`pb-3 text-xs font-bold transition-all relative ${reportSubTab === 'teacher_attendance' ? 'text-indigo-600 border-b-2 border-indigo-600 font-extrabold' : 'text-slate-400 hover:text-slate-600 font-semibold'}`}
+                  >
+                    Laporan Kunjungan Guru
+                  </button>
+                </div>
+
+                {/* Saringan / Filters Bar */}
+                <div className="flex flex-wrap items-center gap-2 bg-slate-50/50 p-3 rounded-xl border border-slate-100/80">
+                  {/* Search Bar (Shared) */}
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      placeholder={
+                        reportSubTab === 'grades' ? "Cari nama, NISN, instansi..." :
+                        reportSubTab === 'student_attendance' ? "Cari nama siswa, NISN, instansi..." :
+                        "Cari guru, instansi, siswa..."
+                      }
+                      className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-800 w-48 sm:w-56 shadow-xs font-medium"
+                      onChange={(e) => { setReportsSearch(e.target.value); setReportsPage(1); }}
+                      value={reportsSearch}
+                    />
+                  </div>
+
+                  {/* Sub-Tab Specific Filters */}
+                  {reportSubTab === 'grades' && (
                     <select
                       value={reportsClassFilter}
                       onChange={(e) => {
                         setReportsClassFilter(e.target.value);
                         setReportsPage(1);
                       }}
-                      className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-700 shadow-sm font-semibold"
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-700 shadow-xs font-semibold"
                     >
                       <option value="">Semua Kelas</option>
                       {KELAS_OPTIONS.map((k) => (
                         <option key={k} value={k}>{k}</option>
                       ))}
                     </select>
+                  )}
 
-                    <button
-                      onClick={handleDownloadReport}
-                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all shadow-sm shadow-indigo-600/10 cursor-pointer"
-                    >
-                      <Download className="w-3.5 h-3.5" /> Ekspor (.JSON)
-                    </button>
-                  </div>
+                  {reportSubTab === 'student_attendance' && (
+                    <>
+                      {/* Class Filter */}
+                      <select
+                        value={studAttClassFilter}
+                        onChange={(e) => {
+                          setStudAttClassFilter(e.target.value);
+                          setReportsPage(1);
+                        }}
+                        className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-700 shadow-xs font-semibold"
+                      >
+                        <option value="">Semua Kelas</option>
+                        {KELAS_OPTIONS.map((k) => (
+                          <option key={k} value={k}>{k}</option>
+                        ))}
+                      </select>
+
+                      {/* Month Filter */}
+                      <select
+                        value={studAttMonthFilter}
+                        onChange={(e) => {
+                          setStudAttMonthFilter(e.target.value);
+                          setReportsPage(1);
+                        }}
+                        className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-700 shadow-xs font-semibold"
+                      >
+                        <option value="">Semua Bulan</option>
+                        <option value="01">Januari</option>
+                        <option value="02">Februari</option>
+                        <option value="03">Maret</option>
+                        <option value="04">April</option>
+                        <option value="05">Mei</option>
+                        <option value="06">Juni</option>
+                        <option value="07">Juli</option>
+                        <option value="08">Agustus</option>
+                        <option value="09">September</option>
+                        <option value="10">Oktober</option>
+                        <option value="11">November</option>
+                        <option value="12">Desember</option>
+                      </select>
+
+                      {/* Status Filter */}
+                      <select
+                        value={studAttStatusFilter}
+                        onChange={(e) => {
+                          setStudAttStatusFilter(e.target.value);
+                          setReportsPage(1);
+                        }}
+                        className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-700 shadow-xs font-semibold"
+                      >
+                        <option value="">Semua Status Kehadiran</option>
+                        <option value="hadir">Hadir</option>
+                        <option value="sakit">Sakit</option>
+                        <option value="izin">Izin</option>
+                        <option value="alfa">Alfa</option>
+                      </select>
+                    </>
+                  )}
+
+                  {reportSubTab === 'teacher_attendance' && (
+                    <>
+                      {/* Teacher Filter */}
+                      <select
+                        value={teachAttGuruFilter}
+                        onChange={(e) => {
+                          setTeachAttGuruFilter(e.target.value);
+                          setReportsPage(1);
+                        }}
+                        className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-700 shadow-xs font-semibold max-w-xs"
+                      >
+                        <option value="">Semua Guru</option>
+                        {uniqueTeachersList.map((tName) => (
+                          <option key={tName} value={tName}>{tName}</option>
+                        ))}
+                      </select>
+
+                      {/* Month Filter */}
+                      <select
+                        value={teachAttMonthFilter}
+                        onChange={(e) => {
+                          setTeachAttMonthFilter(e.target.value);
+                          setReportsPage(1);
+                        }}
+                        className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-700 shadow-xs font-semibold"
+                      >
+                        <option value="">Semua Bulan</option>
+                        <option value="01">Januari</option>
+                        <option value="02">Februari</option>
+                        <option value="03">Maret</option>
+                        <option value="04">April</option>
+                        <option value="05">Mei</option>
+                        <option value="06">Juni</option>
+                        <option value="07">Juli</option>
+                        <option value="08">Agustus</option>
+                        <option value="09">September</option>
+                        <option value="10">Oktober</option>
+                        <option value="11">November</option>
+                        <option value="12">Desember</option>
+                      </select>
+
+                      {/* Monitoring Type Filter */}
+                      <select
+                        value={teachAttTypeFilter}
+                        onChange={(e) => {
+                          setTeachAttTypeFilter(e.target.value);
+                          setReportsPage(1);
+                        }}
+                        className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-700 shadow-xs font-semibold"
+                      >
+                        <option value="">Semua Tipe Monitoring</option>
+                        <option value="Monitoring 1">Monitoring 1</option>
+                        <option value="Monitoring 2">Monitoring 2</option>
+                        <option value="Monitoring 3">Monitoring 3</option>
+                        <option value="Monitoring 4">Monitoring 4</option>
+                        <option value="Monitoring 5">Monitoring 5</option>
+                        <option value="Penjemputan Siswa">Penjemputan Siswa</option>
+                      </select>
+                    </>
+                  )}
                 </div>
 
+                {/* Active Report Table Display */}
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider bg-slate-50/30">
-                        <th className="py-3 px-4 text-center w-12">No</th>
-                        <th className="py-3 px-4">Nama Siswa</th>
-                        <th className="py-3 px-4">Instansi PKL</th>
-                        <th className="py-3 px-4">Guru Pembimbing</th>
-                        <th className="py-3 px-4 text-center">Total Kehadiran</th>
-                        <th className="py-3 px-4">Rincian Nilai Akhir</th>
-                        <th className="py-3 pl-4 text-right">Rerata</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50 text-slate-600">
-                      {filteredReports.length === 0 ? (
-                        <tr>
-                          <td colSpan={7} className="py-8 text-center text-slate-400 italic">
-                            Laporan tidak ditemukan atau belum ada data.
-                          </td>
+                  {reportSubTab === 'grades' && (
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider bg-slate-50/30">
+                          <th className="py-3 px-4 text-center w-12">No</th>
+                          <th className="py-3 px-4">Nama Siswa</th>
+                          <th className="py-3 px-4">Instansi PKL</th>
+                          <th className="py-3 px-4">Guru Pembimbing</th>
+                          <th className="py-3 px-4 text-center">Total Kehadiran</th>
+                          <th className="py-3 px-4">Rincian Nilai Akhir</th>
+                          <th className="py-3 pl-4 text-right">Rerata</th>
                         </tr>
-                      ) : (
-                        paginatedReports.map((rep, idx) => {
-                          const actualIndex = (currentReportsPage - 1) * itemsPerPage + idx + 1;
-                          return (
-                            <tr key={rep.id} className="hover:bg-slate-50/50 transition-colors">
-                              <td className="py-3 px-4 text-center font-medium text-slate-400">
-                                {actualIndex}
-                              </td>
-                              <td className="py-3 pr-4">
-                                <span className="font-semibold text-slate-800 block">{rep.nama}</span>
-                                <span className="text-[10px] text-slate-400">NISN: {rep.nisn}</span>
-                              </td>
-                              <td className="py-3 px-4 font-medium text-slate-700">
-                                {rep.instansi}
-                              </td>
-                              <td className="py-3 px-4 text-slate-600">
-                                {rep.pembimbing}
-                              </td>
-                              <td className="py-3 px-4 text-center">
-                                {rep.kehadiran}
-                              </td>
-                              <td className="py-3 px-4 font-medium text-[11px] leading-normal space-y-0.5">
-                                <p className="text-emerald-700 font-semibold">Mitra: {rep.nilaiIndustri}</p>
-                                <p className="text-indigo-700 font-semibold">Sekolah: {rep.nilaiSekolah}</p>
-                              </td>
-                              <td className="py-3 pl-4 text-right text-sm font-bold text-slate-800">
-                                <span className={rep.rataRata !== 'Belum Ada' ? 'text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded' : 'text-slate-400 italic font-normal'}>
-                                  {rep.rataRata}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50 text-slate-600">
+                        {filteredReports.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="py-8 text-center text-slate-400 italic">
+                              Laporan tidak ditemukan atau belum ada data.
+                            </td>
+                          </tr>
+                        ) : (
+                          paginatedItems.map((rep: any, idx) => {
+                            const actualIndex = (currentReportsPage - 1) * itemsPerPage + idx + 1;
+                            return (
+                              <tr key={rep.id} className="hover:bg-slate-50/50 transition-colors">
+                                <td className="py-3 px-4 text-center font-medium text-slate-400">
+                                  {actualIndex}
+                                </td>
+                                <td className="py-3 pr-4">
+                                  <span className="font-semibold text-slate-800 block">{rep.nama}</span>
+                                  <span className="text-[10px] text-slate-400">NISN: {rep.nisn}</span>
+                                </td>
+                                <td className="py-3 px-4 font-medium text-slate-700">
+                                  {rep.instansi}
+                                </td>
+                                <td className="py-3 px-4 text-slate-600">
+                                  {rep.pembimbing}
+                                </td>
+                                <td className="py-3 px-4 text-center">
+                                  {rep.kehadiran}
+                                </td>
+                                <td className="py-3 px-4 font-medium text-[11px] leading-normal space-y-0.5">
+                                  <p className="text-emerald-700 font-semibold">Mitra: {rep.nilaiIndustri}</p>
+                                  <p className="text-indigo-700 font-semibold">Sekolah: {rep.nilaiSekolah}</p>
+                                </td>
+                                <td className="py-3 pl-4 text-right text-sm font-bold text-slate-800">
+                                  <span className={rep.rataRata !== 'Belum Ada' ? 'text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded' : 'text-slate-400 italic font-normal'}>
+                                    {rep.rataRata}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  )}
+
+                  {reportSubTab === 'student_attendance' && (
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider bg-slate-50/30">
+                          <th className="py-3 px-4 text-center w-12">No</th>
+                          <th className="py-3 px-4">Tanggal</th>
+                          <th className="py-3 px-4">Nama Siswa</th>
+                          <th className="py-3 px-4">Kelas</th>
+                          <th className="py-3 px-4">Instansi Mitra</th>
+                          <th className="py-3 px-4 text-center">Jam</th>
+                          <th className="py-3 px-4 text-center">Status</th>
+                          <th className="py-3 px-4">Keterangan</th>
+                          <th className="py-3 px-4 text-center">Verifikasi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50 text-slate-600">
+                        {filteredStudentAttendance.length === 0 ? (
+                          <tr>
+                            <td colSpan={9} className="py-8 text-center text-slate-400 italic">
+                              Tidak ada data laporan absensi siswa yang cocok dengan filter.
+                            </td>
+                          </tr>
+                        ) : (
+                          paginatedItems.map((att: any, idx) => {
+                            const actualIndex = (currentReportsPage - 1) * itemsPerPage + idx + 1;
+                            return (
+                              <tr key={att.id} className="hover:bg-slate-50/50 transition-colors">
+                                <td className="py-3 px-4 text-center font-medium text-slate-400">
+                                  {actualIndex}
+                                </td>
+                                <td className="py-3 px-4 font-semibold text-slate-700 whitespace-nowrap">
+                                  {att.tanggal}
+                                </td>
+                                <td className="py-3 px-4">
+                                  <span className="font-semibold text-slate-800 block">{att.nama}</span>
+                                  <span className="text-[10px] text-slate-400">NISN: {att.nisn}</span>
+                                </td>
+                                <td className="py-3 px-4 text-slate-600 font-medium">
+                                  {att.kelas}
+                                </td>
+                                <td className="py-3 px-4 font-medium text-slate-700">
+                                  {att.instansi}
+                                </td>
+                                <td className="py-3 px-4 text-center whitespace-nowrap text-[11px] font-mono">
+                                  <span className="text-emerald-600 font-bold">Masuk: {att.jam_masuk}</span>
+                                  <br />
+                                  <span className="text-slate-500">Keluar: {att.jam_keluar || '-'}</span>
+                                </td>
+                                <td className="py-3 px-4 text-center">
+                                  <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                                    att.status === 'hadir' ? 'bg-emerald-100 text-emerald-800' :
+                                    att.status === 'sakit' ? 'bg-amber-100 text-amber-800' :
+                                    att.status === 'izin' ? 'bg-blue-100 text-blue-800' :
+                                    'bg-rose-100 text-rose-800'
+                                  }`}>
+                                    {att.status}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4 max-w-xs truncate text-slate-500 italic" title={att.keterangan}>
+                                  {att.keterangan}
+                                </td>
+                                <td className="py-3 px-4 text-center">
+                                  <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-semibold ${
+                                    att.status_verifikasi === 'disetujui' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                                    att.status_verifikasi === 'ditolak' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
+                                    'bg-amber-50 text-amber-700 border border-amber-200'
+                                  }`}>
+                                    {att.status_verifikasi === 'disetujui' ? 'Valid' :
+                                     att.status_verifikasi === 'ditolak' ? 'Ditolak' : 'Pending'}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  )}
+
+                  {reportSubTab === 'teacher_attendance' && (
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider bg-slate-50/30">
+                          <th className="py-3 px-4 text-center w-12">No</th>
+                          <th className="py-3 px-4">Tanggal & Jam</th>
+                          <th className="py-3 px-4">Nama Guru</th>
+                          <th className="py-3 px-4">Perusahaan Sasaran</th>
+                          <th className="py-3 px-4">Tipe Monitoring</th>
+                          <th className="py-3 px-4">Siswa Dimonitor</th>
+                          <th className="py-3 px-4">Catatan Kunjungan</th>
+                          <th className="py-3 px-4">Lokasi GPS</th>
+                          <th className="py-3 px-4">Foto Bukti</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50 text-slate-600">
+                        {filteredTeacherMonitoring.length === 0 ? (
+                          <tr>
+                            <td colSpan={9} className="py-8 text-center text-slate-400 italic">
+                              Tidak ada data laporan kunjungan guru yang cocok dengan filter.
+                            </td>
+                          </tr>
+                        ) : (
+                          paginatedItems.map((mon: any, idx) => {
+                            const actualIndex = (currentReportsPage - 1) * itemsPerPage + idx + 1;
+                            return (
+                              <tr key={mon.id} className="hover:bg-slate-50/50 transition-colors">
+                                <td className="py-3 px-4 text-center font-medium text-slate-400">
+                                  {actualIndex}
+                                </td>
+                                <td className="py-3 px-4 whitespace-nowrap">
+                                  <span className="font-semibold text-slate-700 block">{mon.tanggal}</span>
+                                  <span className="text-[10px] text-slate-400 font-mono">{mon.jam} WIB</span>
+                                </td>
+                                <td className="py-3 px-4">
+                                  <span className="font-bold text-slate-800 block">{mon.nama_guru}</span>
+                                  <span className="text-[10px] text-slate-400">NIP/NIDN: {mon.nip}</span>
+                                </td>
+                                <td className="py-3 px-4 font-medium text-slate-700">
+                                  {mon.instansi}
+                                </td>
+                                <td className="py-3 px-4 whitespace-nowrap">
+                                  <span className="inline-flex px-2 py-0.5 rounded-full text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                    {mon.tipe}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4 text-slate-700 font-medium max-w-[150px] truncate" title={mon.siswa}>
+                                  {mon.siswa}
+                                </td>
+                                <td className="py-3 px-4 text-slate-500 leading-relaxed max-w-xs truncate" title={mon.catatan}>
+                                  {mon.catatan}
+                                </td>
+                                <td className="py-3 px-4 font-semibold text-slate-700">
+                                  {mon.latitude && mon.longitude ? (
+                                    <a 
+                                      href={`https://www.google.com/maps?q=${mon.latitude},${mon.longitude}`} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer" 
+                                      className="inline-flex items-center gap-1.5 px-2 py-1 bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-100 rounded-lg font-medium transition-colors cursor-pointer"
+                                    >
+                                      <MapPin className="w-3.5 h-3.5 text-sky-500" />
+                                      <span className="font-mono text-[10px]">{mon.latitude.toFixed(5)}, {mon.longitude.toFixed(5)}</span>
+                                    </a>
+                                  ) : (
+                                    <span className="text-slate-400 italic">Tidak Ada GPS</span>
+                                  )}
+                                </td>
+                                <td className="py-3 px-4">
+                                  {mon.foto_url ? (
+                                    <div className="flex items-center">
+                                      <img 
+                                        src={mon.foto_url} 
+                                        alt="Foto Bukti" 
+                                        className="w-10 h-10 rounded-lg object-cover border border-slate-200 cursor-pointer hover:opacity-85 transition-opacity"
+                                        onClick={() => setExpandedPhotoUrl(mon.foto_url)}
+                                        referrerPolicy="no-referrer"
+                                      />
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-400 italic">Tidak Ada Foto</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
 
                 {/* Pagination Controls */}
                 {totalReportsPages > 1 && (
                   <div className="flex flex-col sm:flex-row items-center justify-between border-t border-slate-100 pt-4 gap-3 text-xs text-slate-500">
                     <p className="font-medium text-slate-400">
-                      Menampilkan <span className="font-bold text-slate-700">{Math.min((currentReportsPage - 1) * itemsPerPage + 1, filteredReports.length)}</span> - <span className="font-bold text-slate-700">{Math.min(currentReportsPage * itemsPerPage, filteredReports.length)}</span> dari <span className="font-bold text-slate-700">{filteredReports.length}</span> laporan
+                      Menampilkan <span className="font-bold text-slate-700">{Math.min((currentReportsPage - 1) * itemsPerPage + 1, activeList.length)}</span> - <span className="font-bold text-slate-700">{Math.min(currentReportsPage * itemsPerPage, activeList.length)}</span> dari <span className="font-bold text-slate-700">{activeList.length}</span> laporan
                     </p>
                     
                     <div className="flex items-center gap-1">
@@ -2885,6 +3602,254 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                       >
                         <ChevronRight className="w-4 h-4" />
                       </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Modal Kustomisasi Kop Surat */}
+                {isKopModalOpen && (
+                  <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+                    <div className="bg-white rounded-2xl border border-slate-100 shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto flex flex-col text-slate-800">
+                      
+                      {/* Header */}
+                      <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                        <div>
+                          <h4 className="text-base font-bold text-slate-900 font-sans">Pengaturan Kop Surat Resmi</h4>
+                          <p className="text-xs text-slate-500 mt-0.5 font-sans">Sesuaikan logo dan rincian teks alamat instansi untuk kop surat resmi pada laporan yang dicetak.</p>
+                        </div>
+                        <button
+                          onClick={() => setIsKopModalOpen(false)}
+                          disabled={isSavingKop}
+                          className="p-1.5 hover:bg-slate-100 text-slate-400 hover:text-slate-600 rounded-lg transition-colors disabled:opacity-50"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Content Form */}
+                      <div className="p-6 space-y-4 flex-1">
+                        
+                        {/* Upload Logo Row */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center bg-slate-50 p-4 rounded-xl border border-slate-100">
+                          <div className="text-center md:text-left">
+                            <span className="block text-xs font-bold text-slate-700 font-sans">Logo Instansi</span>
+                            <span className="text-[10px] text-slate-400 font-sans">Rekomendasi rasio 1:1 format PNG transparan.</span>
+                          </div>
+                          
+                          <div className="flex justify-center">
+                            {kopLogo ? (
+                              <div className="relative group w-16 h-16 bg-white border border-slate-200 rounded-lg p-1.5 flex items-center justify-center">
+                                <img src={kopLogo} alt="Logo Preview" className="max-w-full max-h-full object-contain" referrerPolicy="no-referrer" />
+                                <button
+                                  type="button"
+                                  disabled={isSavingKop}
+                                  onClick={() => {
+                                    setKopLogo('');
+                                    localStorage.removeItem('kop_logo');
+                                  }}
+                                  className="absolute -top-1.5 -right-1.5 bg-rose-600 text-white p-0.5 rounded-full hover:bg-rose-700 shadow-xs transition-all cursor-pointer flex items-center justify-center w-5 h-5 disabled:opacity-50"
+                                  title="Hapus Logo"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="w-16 h-16 bg-slate-100 border-2 border-dashed border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-400">
+                                <UploadCloud className="w-5 h-5" />
+                                <span className="text-[8px] mt-1 font-bold font-sans">KOSONG</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div>
+                            <input
+                              type="file"
+                              id="logo-upload"
+                              accept="image/*"
+                              className="hidden"
+                              disabled={isSavingKop}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  const reader = new FileReader();
+                                  reader.onload = (event) => {
+                                    const base64String = event.target?.result as string;
+                                    setKopLogo(base64String);
+                                    localStorage.setItem('kop_logo', base64String);
+                                  };
+                                  reader.readAsDataURL(file);
+                                }
+                              }}
+                            />
+                            <label
+                              htmlFor="logo-upload"
+                              className={`w-full block text-center px-3 py-1.5 bg-white border border-slate-200 text-slate-600 text-xs font-semibold rounded-lg hover:bg-slate-50 cursor-pointer shadow-xs transition-colors font-sans ${isSavingKop ? 'pointer-events-none opacity-50' : ''}`}
+                            >
+                              Pilih Berkas Logo
+                            </label>
+                          </div>
+                        </div>
+
+                        {/* Fields */}
+                        <div className="space-y-3 font-sans">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-1">Baris 1: Tingkat Pemerintahan / Instansi Atas</label>
+                            <input
+                              type="text"
+                              value={kopAtas}
+                              disabled={isSavingKop}
+                              onChange={(e) => {
+                                setKopAtas(e.target.value);
+                                localStorage.setItem('kop_atas', e.target.value);
+                              }}
+                              placeholder="PEMERINTAH PROVINSI JAWA BARAT"
+                              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-xs disabled:opacity-50"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-1">Baris 2: Dinas / Lembaga</label>
+                            <input
+                              type="text"
+                              value={kopTengah}
+                              disabled={isSavingKop}
+                              onChange={(e) => {
+                                setKopTengah(e.target.value);
+                                localStorage.setItem('kop_tengah', e.target.value);
+                              }}
+                              placeholder="DINAS PENDIDIKAN"
+                              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-xs disabled:opacity-50"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-1">Baris 3: Nama Sekolah / Instansi Utama</label>
+                            <input
+                              type="text"
+                              value={kopSekolah}
+                              disabled={isSavingKop}
+                              onChange={(e) => {
+                                setKopSekolah(e.target.value);
+                                localStorage.setItem('kop_sekolah', e.target.value);
+                              }}
+                              placeholder="SMK NEGERI 1 KOTA BANDUNG"
+                              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-xs disabled:opacity-50"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-1">Baris 4: Sub-detail / Bidang Keahlian</label>
+                            <input
+                              type="text"
+                              value={kopSub}
+                              disabled={isSavingKop}
+                              onChange={(e) => {
+                                setKopSub(e.target.value);
+                                localStorage.setItem('kop_sub', e.target.value);
+                              }}
+                              placeholder="Bidang Keahlian: Teknologi Informasi dan Komunikasi"
+                              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-xs disabled:opacity-50"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-1">Alamat Lengkap</label>
+                            <input
+                              type="text"
+                              value={kopAlamat}
+                              disabled={isSavingKop}
+                              onChange={(e) => {
+                                setKopAlamat(e.target.value);
+                                localStorage.setItem('kop_alamat', e.target.value);
+                              }}
+                              placeholder="Jl. Wastukencana No.12, Kec. Sumur Bandung, Kota Bandung, Jawa Barat 40117"
+                              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-xs disabled:opacity-50"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-1">Informasi Kontak & Web</label>
+                            <input
+                              type="text"
+                              value={kopKontak}
+                              disabled={isSavingKop}
+                              onChange={(e) => {
+                                setKopKontak(e.target.value);
+                                localStorage.setItem('kop_kontak', e.target.value);
+                              }}
+                              placeholder="Telp: (022) 4204515 | Email: info@smkn1bandung.sch.id | Website: www.smkn1bandung.sch.id"
+                              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-xs disabled:opacity-50"
+                            />
+                          </div>
+                        </div>
+
+                      </div>
+
+                      {/* Footer Actions */}
+                      <div className="p-6 border-t border-slate-100 bg-slate-50 flex items-center justify-between rounded-b-2xl font-sans">
+                        <button
+                          type="button"
+                          disabled={isSavingKop}
+                          onClick={async () => {
+                            if (window.confirm('Apakah Anda yakin ingin menyetel ulang kop surat ke setelan standar sekolah? Perubahan juga akan langsung disimpan ke database online.')) {
+                              setIsSavingKop(true);
+                              try {
+                                await dbResetSettings();
+                                setKopAtas('PEMERINTAH PROVINSI JAWA BARAT');
+                                setKopTengah('DINAS PENDIDIKAN');
+                                setKopSekolah('SMK NEGERI 1 KOTA BANDUNG');
+                                setKopSub('Bidang Keahlian: Teknologi Informasi dan Komunikasi');
+                                setKopAlamat('Jl. Wastukencana No.12, Kec. Sumur Bandung, Kota Bandung, Jawa Barat 40117');
+                                setKopKontak('Telp: (022) 4204515 | Email: info@smkn1bandung.sch.id | Website: www.smkn1bandung.sch.id');
+                                setKopLogo('');
+                              } catch (err) {
+                                console.error('Gagal menyetel ulang kop:', err);
+                              } finally {
+                                setIsSavingKop(false);
+                              }
+                            }
+                          }}
+                          className="px-3.5 py-2 border border-slate-200 hover:bg-slate-100 text-rose-600 text-xs font-bold rounded-xl transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          Atur Ulang ke Default
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={isSavingKop}
+                          onClick={async () => {
+                            setIsSavingKop(true);
+                            try {
+                              await Promise.all([
+                                dbSaveSetting('kop_atas', kopAtas),
+                                dbSaveSetting('kop_tengah', kopTengah),
+                                dbSaveSetting('kop_sekolah', kopSekolah),
+                                dbSaveSetting('kop_sub', kopSub),
+                                dbSaveSetting('kop_alamat', kopAlamat),
+                                dbSaveSetting('kop_kontak', kopKontak),
+                                dbSaveSetting('kop_logo', kopLogo)
+                              ]);
+                              setIsKopModalOpen(false);
+                            } catch (err) {
+                              console.error('Gagal menyimpan kop ke database:', err);
+                              alert('Gagal menyinkronkan data ke database online, namun perubahan tetap tersimpan secara lokal.');
+                              setIsKopModalOpen(false);
+                            } finally {
+                              setIsSavingKop(false);
+                            }
+                          }}
+                          className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5 disabled:bg-indigo-400"
+                        >
+                          {isSavingKop ? (
+                            <>
+                              <RefreshCw className="w-3 h-3 animate-spin" /> Menyimpan...
+                            </>
+                          ) : (
+                            'Selesai & Terapkan'
+                          )}
+                        </button>
+                      </div>
+
                     </div>
                   </div>
                 )}
@@ -3606,6 +4571,136 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
         </div>
 
       </div>
+
+      {/* Printable Section and CSS Styling */}
+      {printViewData && (
+        <div id="print-section" className="hidden print:block bg-white text-black p-8 font-sans w-full">
+          <style>{`
+            @media print {
+              body * {
+                visibility: hidden !important;
+              }
+              #print-section, #print-section * {
+                visibility: visible !important;
+              }
+              #print-section {
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                background: white !important;
+                color: black !important;
+                padding: 10px !important;
+                margin: 0 !important;
+              }
+            }
+          `}</style>
+          
+          {/* Kop Surat (School Letterhead) */}
+          <div className="flex items-center border-b-4 border-double border-black pb-4 mb-6 text-black">
+            {kopLogo && (
+              <img src={kopLogo} alt="Logo" className="w-16 h-16 object-contain mr-4 shrink-0" referrerPolicy="no-referrer" />
+            )}
+            <div className="flex-1 text-center">
+              <h1 className="text-sm font-bold uppercase tracking-wide text-black">{kopAtas}</h1>
+              <h1 className="text-base font-extrabold uppercase tracking-wide text-black">{kopTengah}</h1>
+              <h2 className="text-lg font-black uppercase tracking-wide text-black">{kopSekolah}</h2>
+              <p className="text-[10px] italic font-medium mt-0.5 text-black">
+                {kopSub}
+              </p>
+              <p className="text-[8px] mt-0.5 text-black">
+                {kopAlamat}
+              </p>
+              <p className="text-[8px] text-black">
+                {kopKontak}
+              </p>
+            </div>
+            {kopLogo && (
+              <div className="w-16 h-16 mr-4 shrink-0" />
+            )}
+          </div>
+
+          {/* Document Title */}
+          <div className="text-center mb-6">
+            <h3 className="text-sm font-bold uppercase underline tracking-wider text-black">{printViewData.title}</h3>
+            <div className="flex justify-center gap-4 text-[10px] font-medium mt-2">
+              {printViewData.filters.map((f, i) => (
+                <span key={i} className="border border-black px-2 py-0.5 rounded bg-slate-50 text-black">{f}</span>
+              ))}
+            </div>
+          </div>
+
+          {/* Table */}
+          <table className="w-full text-left text-[10px] border-collapse border border-black">
+            <thead>
+              <tr className="bg-slate-100 border-b border-black">
+                {printViewData.headers.map((h, i) => (
+                  <th key={i} className="border border-black py-2 px-2 font-bold uppercase text-center bg-slate-50 text-black">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {printViewData.rows.length === 0 ? (
+                <tr>
+                  <td colSpan={printViewData.headers.length} className="border border-black py-4 text-center italic text-black">
+                    Tidak ada data yang tersedia untuk dicetak.
+                  </td>
+                </tr>
+              ) : (
+                printViewData.rows.map((row, idx) => (
+                  <tr key={idx} className="border-b border-black">
+                    {row.map((cell, cIdx) => (
+                      <td key={cIdx} className={`border border-black py-1 px-2 text-black ${cIdx === 0 ? 'text-center' : ''}`}>
+                        {cell}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+
+          {/* Signatures */}
+          <div className="mt-12 grid grid-cols-2 text-center text-[10px]">
+            <div>
+              <p className="font-semibold text-black">Mengetahui,</p>
+              <p className="font-semibold mb-16 text-black">Kepala SMKN 1 Kota Bandung</p>
+              <p className="font-bold underline text-black">( Drs. H. Tatang, M.Pd )</p>
+              <p className="text-slate-600">NIP. 196803151994031008</p>
+            </div>
+            <div>
+              <p className="font-semibold text-black">Bandung, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+              <p className="font-semibold mb-16 text-black">Hubungan Industri (Hubin)</p>
+              <p className="font-bold underline text-black">( Danu Wijaya, S.Kom )</p>
+              <p className="text-slate-600">NIP. 198512122010011002</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Foto Preview */}
+      {expandedPhotoUrl && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-xl max-w-3xl w-full p-4 flex flex-col text-slate-800 relative">
+            <button
+              onClick={() => setExpandedPhotoUrl(null)}
+              className="absolute top-4 right-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full p-1.5 transition-all z-10"
+              title="Tutup"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="text-center font-bold text-slate-700 mb-2 font-sans">Foto Bukti Kunjungan</div>
+            <div className="flex justify-center items-center bg-slate-950 rounded-xl p-2 overflow-hidden max-h-[75vh]">
+              <img 
+                src={expandedPhotoUrl} 
+                alt="Bukti Kunjungan" 
+                className="max-h-[70vh] max-w-full rounded-lg object-contain" 
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

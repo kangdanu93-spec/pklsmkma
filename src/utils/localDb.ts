@@ -127,6 +127,13 @@ CREATE TABLE IF NOT EXISTS pkl_teacher_monitoring (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- 10. TABEL PENGATURAN / SETTINGS KOP SURAT
+CREATE TABLE IF NOT EXISTS pkl_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 -- Nonaktifkan RLS agar aplikasi dapat membaca dan menulis data tanpa kendala Policy (untuk mode demo/sandbox)
 ALTER TABLE pkl_instansi DISABLE ROW LEVEL SECURITY;
 ALTER TABLE pkl_users DISABLE ROW LEVEL SECURITY;
@@ -137,6 +144,7 @@ ALTER TABLE pkl_evaluations DISABLE ROW LEVEL SECURITY;
 ALTER TABLE pkl_announcements DISABLE ROW LEVEL SECURITY;
 ALTER TABLE pkl_classes DISABLE ROW LEVEL SECURITY;
 ALTER TABLE pkl_teacher_monitoring DISABLE ROW LEVEL SECURITY;
+ALTER TABLE pkl_settings DISABLE ROW LEVEL SECURITY;
 
 -- Tambahkan master kelas awal
 INSERT INTO pkl_classes (id, nama_kelas, jurusan) VALUES
@@ -1644,4 +1652,120 @@ export async function dbDeleteTeacherMonitoring(id: string): Promise<{ success: 
 
   return { success, fromSupabase, error: errorMsg };
 }
+
+export async function dbGetSettings(): Promise<{ [key: string]: string }> {
+  const sb = getSupabaseClient();
+  const settings: { [key: string]: string } = {};
+  
+  // Load defaults
+  const defaults: { [key: string]: string } = {
+    kop_atas: 'PEMERINTAH PROVINSI JAWA BARAT',
+    kop_tengah: 'DINAS PENDIDIKAN',
+    kop_sekolah: 'SMK NEGERI 1 KOTA BANDUNG',
+    kop_sub: 'Bidang Keahlian: Teknologi Informasi dan Komunikasi',
+    kop_alamat: 'Jl. Wastukencana No.12, Kec. Sumur Bandung, Kota Bandung, Jawa Barat 40117',
+    kop_kontak: 'Telp: (022) 4204515 | Email: info@smkn1bandung.sch.id | Website: www.smkn1bandung.sch.id',
+    kop_logo: ''
+  };
+
+  // Merge with localStorage first as cache/fallback
+  Object.keys(defaults).forEach(key => {
+    settings[key] = localStorage.getItem(key) || defaults[key];
+  });
+
+  if (sb) {
+    try {
+      const { data, error } = await sb.from('pkl_settings').select('*');
+      if (!error && data) {
+        data.forEach((row: { key: string, value: string }) => {
+          settings[row.key] = row.value;
+          localStorage.setItem(row.key, row.value);
+        });
+      } else {
+        if (error && (error.code === 'P0001' || error.message?.includes('relation') || error.message?.includes('does not exist'))) {
+          console.warn('Supabase table pkl_settings not found, using local storage fallback');
+        }
+      }
+    } catch (e) {
+      console.error('Supabase get settings failed:', e);
+    }
+  }
+
+  return settings;
+}
+
+export async function dbSaveSetting(key: string, value: string): Promise<{ success: boolean, fromSupabase: boolean, error?: string }> {
+  // Save to localStorage immediately
+  localStorage.setItem(key, value);
+
+  const sb = getSupabaseClient();
+  let fromSupabase = false;
+  let success = false;
+  let errorMsg = '';
+
+  if (sb) {
+    try {
+      const { error } = await sb.from('pkl_settings').upsert({ key, value });
+      if (!error) {
+        success = true;
+        fromSupabase = true;
+      } else {
+        if (error.code === 'P0001' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
+          console.warn('Supabase table pkl_settings not found, saved to local storage only');
+        } else {
+          console.error('Supabase save setting failed:', error);
+          errorMsg = error.message;
+          fromSupabase = true;
+        }
+      }
+    } catch (e: any) {
+      console.error('Supabase save setting failed:', e);
+      errorMsg = e?.message || String(e);
+    }
+  }
+
+  if (!fromSupabase) {
+    success = true;
+  }
+
+  return { success, fromSupabase, error: errorMsg };
+}
+
+export async function dbResetSettings(): Promise<{ success: boolean, fromSupabase: boolean, error?: string }> {
+  const keys = ['kop_atas', 'kop_tengah', 'kop_sekolah', 'kop_sub', 'kop_alamat', 'kop_kontak', 'kop_logo'];
+  keys.forEach(key => localStorage.removeItem(key));
+
+  const sb = getSupabaseClient();
+  let fromSupabase = false;
+  let success = false;
+  let errorMsg = '';
+
+  if (sb) {
+    try {
+      const { error } = await sb.from('pkl_settings').delete().in('key', keys);
+      if (!error) {
+        success = true;
+        fromSupabase = true;
+      } else {
+        if (error.code === 'P0001' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
+          console.warn('Supabase table pkl_settings not found, cleared local storage only');
+        } else {
+          console.error('Supabase reset settings failed:', error);
+          errorMsg = error.message;
+          fromSupabase = true;
+        }
+      }
+    } catch (e: any) {
+      console.error('Supabase reset settings failed:', e);
+      errorMsg = e?.message || String(e);
+    }
+  }
+
+  if (!fromSupabase) {
+    success = true;
+  }
+
+  return { success, fromSupabase, error: errorMsg };
+}
+
 
