@@ -74,8 +74,10 @@ CREATE TABLE IF NOT EXISTS pkl_attendance (
   status TEXT NOT NULL CHECK (status IN ('hadir', 'sakit', 'izin', 'alfa')),
   keterangan TEXT,
   status_verifikasi TEXT NOT NULL DEFAULT 'pending' CHECK (status_verifikasi IN ('pending', 'disetujui', 'ditolak')),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  UNIQUE(id_siswa, tanggal)
 );
+ALTER TABLE pkl_attendance ADD CONSTRAINT pkl_attendance_siswa_tanggal_key UNIQUE (id_siswa, tanggal);
 
 -- 6. TABEL EVALUASI / NILAI AKHIR
 CREATE TABLE IF NOT EXISTS pkl_evaluations (
@@ -1050,23 +1052,100 @@ export async function dbDeleteJournal(id: string): Promise<{ success: boolean, f
 
 // ---------------------- ATTENDANCE ----------------------
 
+export function deduplicateAttendance(records: PklAttendance[]): { cleanRecords: PklAttendance[], duplicateIdsToRemove: string[] } {
+  const map = new Map<string, PklAttendance>();
+  const duplicateIdsToRemove: string[] = [];
+
+  for (const rec of records) {
+    if (!rec || !rec.id_siswa || !rec.tanggal) continue;
+    const key = `${rec.id_siswa}_${rec.tanggal}`;
+    
+    if (!map.has(key)) {
+      map.set(key, rec);
+    } else {
+      const existing = map.get(key)!;
+      let replaceExisting = false;
+
+      const recHasKeluar = !!(rec.jam_keluar && rec.jam_keluar !== '-');
+      const existingHasKeluar = !!(existing.jam_keluar && existing.jam_keluar !== '-');
+
+      if (recHasKeluar && !existingHasKeluar) {
+        replaceExisting = true;
+      } else if (!recHasKeluar && existingHasKeluar) {
+        replaceExisting = false;
+      } else if (isUuid(rec.id) && !isUuid(existing.id)) {
+        replaceExisting = true;
+      } else if (rec.status_verifikasi === 'disetujui' && existing.status_verifikasi !== 'disetujui') {
+        replaceExisting = true;
+      }
+
+      if (replaceExisting) {
+        if (existing.id && isUuid(existing.id) && existing.id !== rec.id) {
+          duplicateIdsToRemove.push(existing.id);
+        }
+        map.set(key, rec);
+      } else {
+        if (rec.id && isUuid(rec.id) && rec.id !== existing.id) {
+          duplicateIdsToRemove.push(rec.id);
+        }
+      }
+    }
+  }
+
+  return {
+    cleanRecords: Array.from(map.values()),
+    duplicateIdsToRemove
+  };
+}
+
 export async function dbGetAttendance(): Promise<{ data: PklAttendance[], fromSupabase: boolean }> {
   const sb = getSupabaseClient();
+  let rawData: PklAttendance[] = [];
+  let fromSupabase = false;
+
   if (sb) {
     try {
       const { data, error } = await sb.from('pkl_attendance').select('*').order('tanggal', { ascending: false });
       if (!error && data) {
-        return { data: data as PklAttendance[], fromSupabase: true };
+        rawData = data as PklAttendance[];
+        fromSupabase = true;
       }
     } catch (e) {}
   }
-  return { data: localDb.get<PklAttendance>('SIM_PKL_ATTENDANCE'), fromSupabase: false };
+
+  if (!fromSupabase) {
+    rawData = localDb.get<PklAttendance>('SIM_PKL_ATTENDANCE');
+  }
+
+  const { cleanRecords, duplicateIdsToRemove } = deduplicateAttendance(rawData);
+
+  // Sync clean records to local memory/storage
+  localDb.set('SIM_PKL_ATTENDANCE', cleanRecords);
+
+  // Asynchronously remove duplicate records from Supabase database if connected
+  if (sb && fromSupabase && duplicateIdsToRemove.length > 0) {
+    (async () => {
+      try {
+        const { error } = await sb.from('pkl_attendance').delete().in('id', duplicateIdsToRemove);
+        if (!error) {
+          console.log(`Deduplicated Supabase attendance: deleted ${duplicateIdsToRemove.length} duplicate rows.`);
+        }
+      } catch (e) {
+        console.error('Failed to cleanup duplicate attendance rows in Supabase:', e);
+      }
+    })();
+  }
+
+  return { data: cleanRecords, fromSupabase };
 }
 
 export async function dbSaveAttendance(attendance: PklAttendance): Promise<{ success: boolean, data?: PklAttendance, fromSupabase: boolean, error?: string }> {
-  // Ensure the ID is a valid UUID before saving
-  if (!isUuid(attendance.id)) {
-    attendance.id = generateUUID();
+  const list = localDb.get<PklAttendance>('SIM_PKL_ATTENDANCE');
+
+  // Find if an existing record already exists for this student & date
+  const existingLocal = list.find(a => a.id_siswa === attendance.id_siswa && a.tanggal === attendance.tanggal);
+  if (existingLocal && existingLocal.id && isUuid(existingLocal.id)) {
+    attendance.id = existingLocal.id;
   }
 
   const sb = getSupabaseClient();
@@ -1077,8 +1156,24 @@ export async function dbSaveAttendance(attendance: PklAttendance): Promise<{ suc
 
   if (sb) {
     try {
-      // Clean up properties that are not present in the database table pkl_attendance
-      // such as latitude, longitude, latitude_keluar, longitude_keluar to prevent "column does not exist" error
+      // Check Supabase for existing record if we don't have a UUID yet
+      if (!attendance.id || !isUuid(attendance.id)) {
+        const { data: existingSb } = await sb.from('pkl_attendance')
+          .select('id')
+          .eq('id_siswa', attendance.id_siswa)
+          .eq('tanggal', attendance.tanggal)
+          .limit(1);
+        
+        if (existingSb && existingSb.length > 0 && isUuid(existingSb[0].id)) {
+          attendance.id = existingSb[0].id;
+        }
+      }
+
+      // Ensure valid UUID
+      if (!isUuid(attendance.id)) {
+        attendance.id = generateUUID();
+      }
+
       const { latitude, longitude, latitude_keluar, longitude_keluar, ...dbPayload } = attendance;
       const { data, error } = await sb.from('pkl_attendance').upsert(dbPayload).select();
       if (!error && data && data.length > 0) {
@@ -1091,9 +1186,6 @@ export async function dbSaveAttendance(attendance: PklAttendance): Promise<{ suc
         } else {
           console.error('Supabase save attendance failed:', error.message);
           errorMsg = error.message;
-          if (error.code === '42501') {
-            errorMsg = 'Row Level Security (RLS) aktif pada tabel pkl_attendance. Silakan nonaktifkan RLS dengan perintah SQL: "ALTER TABLE pkl_attendance DISABLE ROW LEVEL SECURITY;"';
-          }
           fromSupabase = true;
         }
       } else {
@@ -1104,16 +1196,22 @@ export async function dbSaveAttendance(attendance: PklAttendance): Promise<{ suc
       console.error('Supabase save attendance threw exception:', e);
       errorMsg = e?.message || String(e);
     }
+  } else {
+    if (!isUuid(attendance.id)) {
+      attendance.id = generateUUID();
+    }
   }
 
-  const list = localDb.get<PklAttendance>('SIM_PKL_ATTENDANCE');
-  const index = list.findIndex(a => a.id === attendance.id);
-  if (index !== -1) {
-    list[index] = returnedData;
+  // Update localDb list
+  const existingIdx = list.findIndex(a => a.id === attendance.id || (a.id_siswa === attendance.id_siswa && a.tanggal === attendance.tanggal));
+  if (existingIdx !== -1) {
+    list[existingIdx] = returnedData;
   } else {
     list.push(returnedData);
   }
-  localDb.set('SIM_PKL_ATTENDANCE', list);
+
+  const { cleanRecords } = deduplicateAttendance(list);
+  localDb.set('SIM_PKL_ATTENDANCE', cleanRecords);
 
   if (!fromSupabase) success = true;
   return { success, data: returnedData, fromSupabase, error: errorMsg };
@@ -1367,17 +1465,35 @@ export async function syncLocalDataToSupabase(): Promise<{ success: boolean, mes
     }
 
     const attendance = localDb.get<PklAttendance>('SIM_PKL_ATTENDANCE');
-    for (const a of attendance) {
+    const { cleanRecords: cleanAtt } = deduplicateAttendance(attendance);
+
+    // Fetch existing Supabase attendance records to map (id_siswa + tanggal) -> ID
+    const { data: existingSbAtt } = await sb.from('pkl_attendance').select('id, id_siswa, tanggal');
+    const sbAttMap = new Map<string, string>();
+    if (existingSbAtt) {
+      existingSbAtt.forEach((row: any) => {
+        if (row.id_siswa && row.tanggal && row.id) {
+          sbAttMap.set(`${row.id_siswa}_${row.tanggal}`, row.id);
+        }
+      });
+    }
+
+    for (const a of cleanAtt) {
+      const key = `${a.id_siswa}_${a.tanggal}`;
+      const existingSbId = sbAttMap.get(key);
+      const targetId = (a.id && isUuid(a.id)) ? a.id : (existingSbId || generateUUID());
+
       await sb.from('pkl_attendance').upsert({
-        id: a.id.includes('att-') ? undefined : a.id,
+        id: targetId,
         id_siswa: a.id_siswa,
         tanggal: a.tanggal,
         jam_masuk: a.jam_masuk,
-        jam_keluar: a.jam_keluar,
+        jam_keluar: a.jam_keluar || null,
         status: a.status,
-        keterangan: a.keterangan,
+        keterangan: a.keterangan || null,
         status_verifikasi: a.status_verifikasi
       });
+      sbAttMap.set(key, targetId);
     }
 
     const evals = localDb.get<PklEvaluation>('SIM_PKL_EVALUATIONS');

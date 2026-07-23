@@ -926,13 +926,19 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
   };
 
   const compileStudentAttendanceReport = () => {
-    return attendance.map(att => {
+    const reportMap = new Map<string, any>();
+
+    attendance.forEach(att => {
+      if (!att || !att.id_siswa || !att.tanggal) return;
+      const key = `${att.id_siswa}_${att.tanggal}`;
+
       const student = users.find(u => u.id === att.id_siswa && u.role === 'siswa');
       const placement = placements.find(p => p.id_siswa === att.id_siswa && p.status === 'disetujui');
       const company = placement ? instansiList.find(i => i.id === placement.id_instansi) : null;
-      
-      return {
+
+      const item = {
         id: att.id,
+        id_siswa: att.id_siswa,
         tanggal: att.tanggal || '-',
         nama: student?.nama || 'Siswa Tidak Dikenal',
         nisn: student?.nomor_induk || '-',
@@ -943,9 +949,30 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
         jam_keluar: att.jam_keluar || '-',
         status: att.status || 'alfa',
         keterangan: att.keterangan || '-',
-        status_verifikasi: att.status_verifikasi || 'pending'
+        status_verifikasi: att.status_verifikasi || 'pending',
+        latitude: att.latitude,
+        longitude: att.longitude,
+        latitude_keluar: att.latitude_keluar,
+        longitude_keluar: att.longitude_keluar
       };
+
+      if (!reportMap.has(key)) {
+        reportMap.set(key, item);
+      } else {
+        const existing = reportMap.get(key)!;
+        // Merge clock out info if available
+        if (att.jam_keluar && att.jam_keluar !== '-' && (!existing.jam_keluar || existing.jam_keluar === '-')) {
+          existing.jam_keluar = att.jam_keluar;
+          existing.latitude_keluar = att.latitude_keluar;
+          existing.longitude_keluar = att.longitude_keluar;
+        }
+        if (att.status_verifikasi === 'disetujui' && existing.status_verifikasi !== 'disetujui') {
+          existing.status_verifikasi = 'disetujui';
+        }
+      }
     });
+
+    return Array.from(reportMap.values());
   };
 
   const compileTeacherMonitoringReport = () => {

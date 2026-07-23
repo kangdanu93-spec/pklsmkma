@@ -50,6 +50,7 @@ export default function StudentDashboard({ student, instansiList, announcements,
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
   const [isLocating, setIsLocating] = useState(false);
+  const [isSubmittingAtt, setIsSubmittingAtt] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
 
   const [applyInstansiId, setApplyInstansiId] = useState('');
@@ -177,55 +178,62 @@ export default function StudentDashboard({ student, instansiList, announcements,
       return;
     }
 
-    // Capture precise current submission time and date
-    const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
-    const currentTimeStr = now.toTimeString().split(' ')[0].substring(0, 5);
-    
-    // Check if clocked in today
-    const existingLog = attendanceLogs.find(a => a.tanggal === todayStr);
+    if (isSubmittingAtt) return;
+    setIsSubmittingAtt(true);
 
-    if (existingLog) {
-      if (existingLog.jam_keluar) {
-        alert('Anda sudah melakukan absen masuk dan pulang hari ini.');
-        return;
-      }
+    try {
+      // Capture precise current submission time and date
+      const now = new Date();
+      const todayStr = now.toISOString().split('T')[0];
+      const currentTimeStr = now.toTimeString().split(' ')[0].substring(0, 5);
       
-      // Clock out
-      const updatedLog: PklAttendance = {
-        ...existingLog,
-        jam_keluar: currentTimeStr,
-        latitude_keluar: latitude || undefined,
-        longitude_keluar: longitude || undefined,
-      };
+      // Check if clocked in today
+      const existingLog = attendanceLogs.find(a => a.tanggal === todayStr);
 
-      const res = await dbSaveAttendance(updatedLog);
-      if (res.success) {
-        setAttSuccess('Absen pulang berhasil dicatat!');
-        fetchStudentData();
-        setTimeout(() => setAttSuccess(''), 4000);
-      }
-    } else {
-      // Clock in
-      const newLog: PklAttendance = {
-        id: `att-${Date.now()}`,
-        id_siswa: student.id,
-        tanggal: todayStr,
-        jam_masuk: currentTimeStr,
-        status: attStatus,
-        keterangan: attKeterangan,
-        status_verifikasi: 'disetujui',
-        latitude: latitude || undefined,
-        longitude: longitude || undefined,
-      };
+      if (existingLog) {
+        if (existingLog.jam_keluar) {
+          alert('Anda sudah melakukan absen masuk dan pulang hari ini.');
+          return;
+        }
+        
+        // Clock out
+        const updatedLog: PklAttendance = {
+          ...existingLog,
+          jam_keluar: currentTimeStr,
+          latitude_keluar: latitude || undefined,
+          longitude_keluar: longitude || undefined,
+        };
 
-      const res = await dbSaveAttendance(newLog);
-      if (res.success) {
-        setAttSuccess('Absen masuk berhasil dicatat!');
-        setAttKeterangan('');
-        fetchStudentData();
-        setTimeout(() => setAttSuccess(''), 4000);
+        const res = await dbSaveAttendance(updatedLog);
+        if (res.success) {
+          setAttSuccess('Absen pulang berhasil dicatat!');
+          fetchStudentData();
+          setTimeout(() => setAttSuccess(''), 4000);
+        }
+      } else {
+        // Clock in
+        const newLog: PklAttendance = {
+          id: `att-${Date.now()}`,
+          id_siswa: student.id,
+          tanggal: todayStr,
+          jam_masuk: currentTimeStr,
+          status: attStatus,
+          keterangan: attKeterangan,
+          status_verifikasi: 'disetujui',
+          latitude: latitude || undefined,
+          longitude: longitude || undefined,
+        };
+
+        const res = await dbSaveAttendance(newLog);
+        if (res.success) {
+          setAttSuccess('Absen masuk berhasil dicatat!');
+          setAttKeterangan('');
+          fetchStudentData();
+          setTimeout(() => setAttSuccess(''), 4000);
+        }
       }
+    } finally {
+      setIsSubmittingAtt(false);
     }
   };
 
@@ -591,9 +599,10 @@ export default function StudentDashboard({ student, instansiList, announcements,
 
                             <button
                               type="submit"
-                              className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 uppercase tracking-wider"
+                              disabled={isSubmittingAtt}
+                              className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 uppercase tracking-wider"
                             >
-                              <Navigation className="w-4 h-4 shrink-0" /> Kirim Absen Masuk (Clock-In)
+                              <Navigation className="w-4 h-4 shrink-0" /> {isSubmittingAtt ? 'Memproses...' : 'Kirim Absen Masuk (Clock-In)'}
                             </button>
                           </>
                         ) : (
@@ -605,9 +614,10 @@ export default function StudentDashboard({ student, instansiList, announcements,
 
                             <button
                               type="submit"
-                              className="w-full py-3 rounded-xl bg-slate-900 hover:bg-slate-950 text-white text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 uppercase tracking-wider"
+                              disabled={isSubmittingAtt}
+                              className="w-full py-3 rounded-xl bg-slate-900 hover:bg-slate-950 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 uppercase tracking-wider"
                             >
-                              <Navigation className="w-4 h-4 shrink-0 rotate-180" /> Kirim Absen Pulang (Clock-Out)
+                              <Navigation className="w-4 h-4 shrink-0 rotate-180" /> {isSubmittingAtt ? 'Memproses...' : 'Kirim Absen Pulang (Clock-Out)'}
                             </button>
                           </div>
                         )}
