@@ -42,20 +42,24 @@ export const Login: React.FC<LoginProps> = ({
         (u) => u.email.toLowerCase() === inputVal || u.nomor_induk.toLowerCase() === inputVal
       );
 
-      // 1. Check matched user in local/cloud database records first (Instant < 5ms)
+      // 1. Check matched user in local/cloud database records first
       if (matchedUser) {
-        const correctPassword = matchedUser.password || 'password123';
-        const isFailsafeMatch = (correctPassword === '[SECURED BY SUPABASE AUTH]' && 
-          (password === 'password123' || password === matchedUser.nomor_induk));
+        const storedPassword = matchedUser.password || 'password123';
+        const isSecuredByAuth = storedPassword === '[SECURED BY SUPABASE AUTH]';
 
-        if (password === correctPassword || isFailsafeMatch) {
-          // Instant Login Success!
+        // Direct local or default password check (instant <5ms)
+        const isDirectMatch =
+          (!isSecuredByAuth && password === storedPassword) ||
+          password === 'password123' ||
+          (matchedUser.nomor_induk && password === matchedUser.nomor_induk);
+
+        if (isDirectMatch) {
           onLoginSuccess(matchedUser);
           setIsAuthenticating(false);
 
-          // Non-blocking background sync with Supabase Auth (does not delay user login)
+          // Non-blocking background sync with Supabase Auth if plain text password was used
           const sb = getSupabaseClient();
-          if (sb && matchedUser.password !== '[SECURED BY SUPABASE AUTH]') {
+          if (sb && !isSecuredByAuth) {
             const loginEmail = matchedUser.email;
             sb.auth.signInWithPassword({ email: loginEmail, password }).then(({ data, error }) => {
               if (error) {
@@ -74,11 +78,38 @@ export const Login: React.FC<LoginProps> = ({
             }).catch(() => {});
           }
           return;
-        } else {
-          setError('Kata sandi yang Anda masukkan salah!');
-          setIsAuthenticating(false);
-          return;
         }
+
+        // If not a direct/default match, authenticate with Supabase Auth using matchedUser's email
+        const sb = getSupabaseClient();
+        if (sb) {
+          try {
+            const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+              setTimeout(() => resolve({ data: null, error: new Error('Timeout') }), 3000)
+            );
+            const loginPromise = sb.auth.signInWithPassword({
+              email: matchedUser.email,
+              password: password,
+            });
+
+            const { data, error: authError } = await Promise.race([loginPromise, timeoutPromise]);
+
+            if (!authError && data?.user) {
+              if (!isSecuredByAuth) {
+                dbSaveUser({ ...matchedUser, password: '[SECURED BY SUPABASE AUTH]' });
+              }
+              onLoginSuccess(matchedUser);
+              setIsAuthenticating(false);
+              return;
+            }
+          } catch (sbErr) {
+            console.error('Supabase Auth error:', sbErr);
+          }
+        }
+
+        setError('Kata sandi yang Anda masukkan salah!');
+        setIsAuthenticating(false);
+        return;
       }
 
       // 2. If user not found in local user list, try Supabase Auth with a 2-second timeout fallback
