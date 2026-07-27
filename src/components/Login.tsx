@@ -36,126 +36,72 @@ export const Login: React.FC<LoginProps> = ({
     setIsAuthenticating(true);
 
     try {
-      const sb = getSupabaseClient();
       const inputVal = email.trim().toLowerCase();
       // Match by email OR nomor_induk (NISN/NIP)
       const matchedUser = users.find(
         (u) => u.email.toLowerCase() === inputVal || u.nomor_induk.toLowerCase() === inputVal
       );
 
-      const loginEmail = matchedUser ? matchedUser.email : inputVal;
-
-      if (sb) {
-        // 1. Attempt login with official Supabase Auth
-        const { data, error: authError } = await sb.auth.signInWithPassword({
-          email: loginEmail,
-          password: password,
-        });
-
-        if (!authError && data?.user) {
-          // Success! Fetch the matched local/public user profile
-          if (matchedUser) {
-            // Clean up the plain-text password column from the public table for privacy
-            if (matchedUser.password && matchedUser.password !== '[SECURED BY SUPABASE AUTH]') {
-              const updated = { ...matchedUser, password: '[SECURED BY SUPABASE AUTH]' };
-              await dbSaveUser(updated);
-            }
-            onLoginSuccess(matchedUser);
-          } else {
-            setError('Autentikasi Supabase berhasil, namun profil Anda tidak terdaftar di SIM PKL. Silakan hubungi admin.');
-          }
-          setIsAuthenticating(false);
-          return;
-        }
-
-        // 2. If Auth login fails because user isn't enrolled in Supabase Auth yet,
-        // or if they are unconfirmed, we can check if they exist in pkl_users with correct plain password.
-        if (matchedUser) {
-          const correctPassword = matchedUser.password || 'password123';
-          
-          // Failsafe backup validation for demo/school environment
-          const isFailsafeMatch = (correctPassword === '[SECURED BY SUPABASE AUTH]' && 
-            (password === 'password123' || password === matchedUser.nomor_induk));
-
-          if (password === correctPassword || isFailsafeMatch) {
-            // Self-healing: enrollment to Supabase Auth on-the-fly!
-            const noSessionSb = getSupabaseNoSessionClient();
-            if (noSessionSb) {
-              try {
-                const { data: signUpData, error: signUpError } = await noSessionSb.auth.signUp({
-                  email: loginEmail,
-                  password: password,
-                });
-
-                if (!signUpError && signUpData?.user) {
-                  // Now perform official login with the main client to establish session
-                  const { error: finalLoginError } = await sb.auth.signInWithPassword({
-                    email: loginEmail,
-                    password: password,
-                  });
-
-                  if (!finalLoginError) {
-                    // Erase plain-text password from the public table for security!
-                    const updated = { ...matchedUser, password: '[SECURED BY SUPABASE AUTH]' };
-                    await dbSaveUser(updated);
-                    onLoginSuccess(matchedUser);
-                    setIsAuthenticating(false);
-                    return;
-                  } else {
-                    // If login failed (e.g. requires email confirmation), bypass and log in via fallback
-                    console.log('Supabase Auth signIn failed but user password is correct in public table. Logging in via fallback.', finalLoginError);
-                    onLoginSuccess(matchedUser);
-                    setIsAuthenticating(false);
-                    return;
-                  }
-                } else {
-                  // Fallback: If signUp failed (e.g., user already exists, rate limit), bypass and log in anyway
-                  console.log('Supabase Auth signUp failed or user already registered. Logging in via fallback.', signUpError);
-                  onLoginSuccess(matchedUser);
-                  setIsAuthenticating(false);
-                  return;
-                }
-              } catch (signUpErr) {
-                console.error('Silent error during Supabase enrollment:', signUpErr);
-                onLoginSuccess(matchedUser);
-                setIsAuthenticating(false);
-                return;
-              }
-            } else {
-              // Fallback if no-session client could not be created
-              onLoginSuccess(matchedUser);
-              setIsAuthenticating(false);
-              return;
-            }
-          } else {
-            setError('Kata sandi yang Anda masukkan salah!');
-          }
-        } else {
-          let errorMsg = 'Akun dengan identitas tersebut tidak ditemukan!';
-          if (isUsingLocalStorageFallback) {
-            errorMsg += ' (Gagal menyinkronkan data dari cloud. Silakan periksa koneksi internet Anda atau pastikan domain Supabase tidak diblokir oleh jaringan atau ad-blocker Anda)';
-          }
-          setError(errorMsg);
-        }
-      } else {
-        // 3. Fallback to Local Storage authentication if Supabase is offline/not set up
-        if (!matchedUser) {
-          let errorMsg = 'Akun dengan identitas tersebut tidak ditemukan!';
-          if (!isDbConnected) {
-            errorMsg += ' (Aplikasi berjalan dalam mode Offline/Local Storage. Akun baru yang ditambahkan di perangkat lain tidak akan sinkron sampai Database Cloud dihubungkan.)';
-          }
-          setError(errorMsg);
-          setIsAuthenticating(false);
-          return;
-        }
-
+      // 1. Check matched user in local/cloud database records first (Instant < 5ms)
+      if (matchedUser) {
         const correctPassword = matchedUser.password || 'password123';
-        if (password === correctPassword) {
+        const isFailsafeMatch = (correctPassword === '[SECURED BY SUPABASE AUTH]' && 
+          (password === 'password123' || password === matchedUser.nomor_induk));
+
+        if (password === correctPassword || isFailsafeMatch) {
+          // Instant Login Success!
           onLoginSuccess(matchedUser);
+          setIsAuthenticating(false);
+
+          // Non-blocking background sync with Supabase Auth (does not delay user login)
+          const sb = getSupabaseClient();
+          if (sb && matchedUser.password !== '[SECURED BY SUPABASE AUTH]') {
+            const loginEmail = matchedUser.email;
+            sb.auth.signInWithPassword({ email: loginEmail, password }).then(({ data, error }) => {
+              if (error) {
+                const noSessionSb = getSupabaseNoSessionClient();
+                if (noSessionSb) {
+                  noSessionSb.auth.signUp({ email: loginEmail, password }).then(({ data: suData, error: suErr }) => {
+                    if (!suErr && suData?.user) {
+                      sb.auth.signInWithPassword({ email: loginEmail, password });
+                      dbSaveUser({ ...matchedUser, password: '[SECURED BY SUPABASE AUTH]' });
+                    }
+                  }).catch(() => {});
+                }
+              } else if (data?.user) {
+                dbSaveUser({ ...matchedUser, password: '[SECURED BY SUPABASE AUTH]' });
+              }
+            }).catch(() => {});
+          }
+          return;
         } else {
           setError('Kata sandi yang Anda masukkan salah!');
+          setIsAuthenticating(false);
+          return;
         }
       }
+
+      // 2. If user not found in local user list, try Supabase Auth with a 2-second timeout fallback
+      const sb = getSupabaseClient();
+      if (sb) {
+        const timeoutPromise = new Promise<{ data: any, error: any }>((resolve) => 
+          setTimeout(() => resolve({ data: null, error: new Error('Timeout') }), 2000)
+        );
+        const loginPromise = sb.auth.signInWithPassword({ email: inputVal, password });
+        const { data, error: authError } = await Promise.race([loginPromise, timeoutPromise]);
+
+        if (!authError && data?.user) {
+          setError('Autentikasi Supabase berhasil, namun profil Anda tidak terdaftar di SIM PKL. Silakan hubungi admin.');
+          setIsAuthenticating(false);
+          return;
+        }
+      }
+
+      let errorMsg = 'Akun dengan identitas tersebut tidak ditemukan!';
+      if (isUsingLocalStorageFallback) {
+        errorMsg += ' (Gagal menyinkronkan data dari cloud. Silakan periksa koneksi internet Anda)';
+      }
+      setError(errorMsg);
     } catch (err: any) {
       console.error(err);
       setError(`Terjadi kesalahan sistem: ${err?.message || err}`);

@@ -169,7 +169,14 @@ export default function App() {
       if (connected) {
         const sb = getSupabaseClient();
         if (sb) {
-          const { data: { session } } = await sb.auth.getSession();
+          const timeoutPromise = new Promise<{ data: { session: null } }>((resolve) => 
+            setTimeout(() => resolve({ data: { session: null } }), 1000)
+          );
+          const { data: { session } } = (await Promise.race([
+            sb.auth.getSession(),
+            timeoutPromise
+          ])) as any;
+
           if (session?.user?.email) {
             const found = resUsers.data.find(u => u.email.toLowerCase() === session.user.email!.toLowerCase());
             if (found) {
