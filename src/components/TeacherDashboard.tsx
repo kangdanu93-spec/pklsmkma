@@ -96,9 +96,9 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
     }
   }, [finalInstansis, monInstansiId]);
 
-  // Auto-advance monitoring type to next available when company selection or monitorings list changes
+  // Auto-advance monitoring type to next available when company selection changes
   useEffect(() => {
-    if (activeTab === 'monitoring') {
+    if (activeTab === 'monitoring' && monInstansiId) {
       const monitoringTypes = [
         'Monitoring 1',
         'Monitoring 2',
@@ -109,22 +109,19 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
       ];
       
       const targetInst = instansiList.find(i => i.id === monInstansiId);
-      const usedTypes = monInstansiId 
-        ? monitorings.filter(m => 
-            m.id_siswa === monInstansiId || 
-            (targetInst && m.nama_instansi === targetInst.nama_instansi)
-          ).map(m => m.tipe_monitoring)
-        : [];
+      const usedTypes = monitorings.filter(m => 
+        m.id_siswa === monInstansiId || 
+        (targetInst && m.nama_instansi === targetInst.nama_instansi)
+      ).map(m => m.tipe_monitoring || (m as any).tipe);
         
       const nextAvailable = monitoringTypes.find(type => !usedTypes.includes(type as any));
       if (nextAvailable) {
         setMonType(nextAvailable as any);
       } else {
-        // Fallback if all are completed, default to Penjemputan Siswa or keep as is
         setMonType('Penjemputan Siswa');
       }
     }
-  }, [monInstansiId, monitorings, activeTab, instansiList]);
+  }, [monInstansiId, activeTab]);
 
   const getLiveLocation = () => {
     setMonIsGettingGPS(true);
@@ -1185,11 +1182,11 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
                       <div className="flex justify-between items-start gap-4">
                         <div className="space-y-1">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                            log.tipe_monitoring === 'Penjemputan Siswa'
+                            (log.tipe_monitoring || (log as any).tipe) === 'Penjemputan Siswa'
                               ? 'bg-amber-50 text-amber-700 border border-amber-200'
                               : 'bg-indigo-50 text-indigo-700 border border-indigo-100'
                           }`}>
-                            {log.tipe_monitoring}
+                            {log.tipe_monitoring || (log as any).tipe || 'Monitoring 1'}
                           </span>
                           <strong className="text-sm text-slate-800 block mt-1">
                             {log.nama_instansi ? log.nama_instansi : 'Kunjungan Umum'}

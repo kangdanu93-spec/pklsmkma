@@ -1048,6 +1048,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
   const compileTeacherMonitoringReport = () => {
     return teacherMonitorings.map(mon => {
       const teacher = users.find(u => u.id === mon.id_guru && u.role === 'guru');
+      const tipeVal = mon.tipe_monitoring || (mon as any).tipe || (mon as any).tipeMonitoring || (mon as any).type;
       return {
         id: mon.id,
         tanggal: mon.tanggal || '-',
@@ -1055,7 +1056,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
         nama_guru: mon.nama_guru || teacher?.nama || 'Guru Tidak Dikenal',
         nip: teacher?.nomor_induk || '-',
         instansi: mon.nama_instansi || '-',
-        tipe: mon.tipe_monitoring || '-',
+        tipe: (tipeVal && tipeVal !== '-') ? tipeVal : 'Monitoring 1',
         siswa: mon.nama_siswa || '-',
         catatan: mon.catatan || '-',
         latitude: mon.latitude,

@@ -1693,6 +1693,11 @@ export async function dbSaveTeacherMonitoring(monitoring: TeacherMonitoring): Pr
     monitoring.id = generateUUID();
   }
 
+  // Guarantee tipe_monitoring is populated
+  if (!monitoring.tipe_monitoring) {
+    monitoring.tipe_monitoring = (monitoring as any).tipe || (monitoring as any).tipeMonitoring || 'Monitoring 1';
+  }
+
   const sb = getSupabaseClient();
   let fromSupabase = false;
   let success = false;
