@@ -36,6 +36,68 @@ const STATIC_JURUSAN_OPTIONS = [
   'Desain Komunikasi Visual'
 ];
 
+const renderSmartPagination = (currentPage: number, totalPages: number, onPageChange: (pg: number) => void) => {
+  if (totalPages <= 1) return null;
+  const pages: (number | string)[] = [];
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) pages.push(i);
+  } else {
+    pages.push(1);
+    if (currentPage > 3) pages.push('...');
+    const start = Math.max(2, currentPage - 1);
+    const end = Math.min(totalPages - 1, currentPage + 1);
+    for (let i = start; i <= end; i++) {
+      if (!pages.includes(i)) pages.push(i);
+    }
+    if (currentPage < totalPages - 2) pages.push('...');
+    if (!pages.includes(totalPages)) pages.push(totalPages);
+  }
+
+  return (
+    <div className="flex items-center gap-1 flex-wrap justify-center">
+      <button
+        onClick={() => onPageChange(Math.max(currentPage - 1, 1))}
+        disabled={currentPage === 1}
+        className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+      >
+        <ChevronLeft className="w-4 h-4" />
+      </button>
+
+      {pages.map((pg, idx) => {
+        if (pg === '...') {
+          return (
+            <span key={`dots-${idx}`} className="px-1.5 py-1 text-slate-400 font-bold select-none text-xs">
+              ...
+            </span>
+          );
+        }
+        const pNum = pg as number;
+        return (
+          <button
+            key={pNum}
+            onClick={() => onPageChange(pNum)}
+            className={`w-7 h-7 text-xs font-bold rounded-lg transition-all ${
+              currentPage === pNum
+                ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
+                : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 font-semibold'
+            }`}
+          >
+            {pNum}
+          </button>
+        );
+      })}
+
+      <button
+        onClick={() => onPageChange(Math.min(currentPage + 1, totalPages))}
+        disabled={currentPage === totalPages}
+        className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+      >
+        <ChevronRight className="w-4 h-4" />
+      </button>
+    </div>
+  );
+};
+
 interface AdminDashboardProps {
   admin: PklUser;
   onRefreshGlobalData: () => void;
@@ -176,6 +238,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
   const [studAttClassFilter, setStudAttClassFilter] = useState('');
   const [studAttStatusFilter, setStudAttStatusFilter] = useState('');
   const [studAttMonthFilter, setStudAttMonthFilter] = useState('');
+  const [studAttDateFilter, setStudAttDateFilter] = useState('');
   const [teachAttGuruFilter, setTeachAttGuruFilter] = useState('');
   const [teachAttTypeFilter, setTeachAttTypeFilter] = useState('');
   const [teachAttMonthFilter, setTeachAttMonthFilter] = useState('');
@@ -242,31 +305,38 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
     if (!silent) setLoading(true);
     try {
       fetchPermissionsData();
-      const resUsers = await dbGetUsers();
-      setUsers(resUsers.data);
 
-      const resInst = await dbGetInstansi();
-      setInstansiList(resInst.data);
+      const [
+        resUsers,
+        resInst,
+        resPlace,
+        resEvals,
+        resAnns,
+        resAtt,
+        resClasses,
+        resMon,
+        resSettings
+      ] = await Promise.all([
+        dbGetUsers().catch(() => ({ data: [] })),
+        dbGetInstansi().catch(() => ({ data: [] })),
+        dbGetPlacements().catch(() => ({ data: [] })),
+        dbGetEvaluations().catch(() => ({ data: [] })),
+        dbGetAnnouncements().catch(() => ({ data: [] })),
+        dbGetAttendance().catch(() => ({ data: [] })),
+        dbGetClasses().catch(() => ({ data: [] })),
+        dbGetTeacherMonitorings().catch(() => ({ data: [] })),
+        dbGetSettings().catch(() => null)
+      ]);
 
-      const resPlace = await dbGetPlacements();
-      setPlacements(resPlace.data);
-
-      const resEvals = await dbGetEvaluations();
-      setEvaluations(resEvals.data);
-
-      const resAnns = await dbGetAnnouncements();
-      setAnnouncements(resAnns.data);
-
-      const resAtt = await dbGetAttendance();
-      setAttendance(resAtt.data);
-
-      const resClasses = await dbGetClasses();
-      setClassesList(resClasses.data);
-
-      const resMon = await dbGetTeacherMonitorings().catch(() => ({ data: [] }));
+      setUsers(resUsers.data || []);
+      setInstansiList(resInst.data || []);
+      setPlacements(resPlace.data || []);
+      setEvaluations(resEvals.data || []);
+      setAnnouncements(resAnns.data || []);
+      setAttendance(resAtt.data || []);
+      setClassesList(resClasses.data || []);
       setTeacherMonitorings(resMon.data || []);
 
-      const resSettings = await dbGetSettings();
       if (resSettings) {
         if (resSettings.kop_atas) setKopAtas(resSettings.kop_atas);
         if (resSettings.kop_tengah) setKopTengah(resSettings.kop_tengah);
@@ -1040,7 +1110,11 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
           const month = att.tanggal.split('-')[1];
           matchesMonth = month === studAttMonthFilter;
         }
-        return matchesQuery && matchesClass && matchesStatus && matchesMonth;
+        let matchesDate = true;
+        if (studAttDateFilter) {
+          matchesDate = att.tanggal === studAttDateFilter;
+        }
+        return matchesQuery && matchesClass && matchesStatus && matchesMonth && matchesDate;
       });
 
       const worksheetData = filteredStudentAttendance.map((d, index) => ({
@@ -1155,7 +1229,11 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
           const month = att.tanggal.split('-')[1];
           matchesMonth = month === studAttMonthFilter;
         }
-        return matchesQuery && matchesClass && matchesStatus && matchesMonth;
+        let matchesDate = true;
+        if (studAttDateFilter) {
+          matchesDate = att.tanggal === studAttDateFilter;
+        }
+        return matchesQuery && matchesClass && matchesStatus && matchesMonth && matchesDate;
       });
 
       const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
@@ -1164,6 +1242,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
       filters = [
         `Kelas: ${studAttClassFilter || 'Semua Kelas'}`,
         `Bulan: ${monthLabel}`,
+        `Tanggal: ${studAttDateFilter || 'Semua Tanggal'}`,
         `Status: ${studAttStatusFilter ? studAttStatusFilter.toUpperCase() : 'Semua Status'}`
       ];
 
@@ -3114,8 +3193,13 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                 const month = att.tanggal.split('-')[1];
                 matchesMonth = month === studAttMonthFilter;
               }
+
+              let matchesDate = true;
+              if (studAttDateFilter) {
+                matchesDate = att.tanggal === studAttDateFilter;
+              }
               
-              return matchesQuery && matchesClass && matchesStatus && matchesMonth;
+              return matchesQuery && matchesClass && matchesStatus && matchesMonth && matchesDate;
             });
 
             const teacherMonitoringReports = compileTeacherMonitoringReport();
@@ -3243,6 +3327,29 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
 
                   {reportSubTab === 'student_attendance' && (
                     <>
+                      {/* Daily Date Filter */}
+                      <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs shadow-xs font-semibold">
+                        <span className="text-slate-500 font-medium whitespace-nowrap">Tanggal:</span>
+                        <input
+                          type="date"
+                          value={studAttDateFilter}
+                          onChange={(e) => {
+                            setStudAttDateFilter(e.target.value);
+                            setReportsPage(1);
+                          }}
+                          className="bg-transparent text-slate-700 text-xs focus:outline-none cursor-pointer font-medium"
+                        />
+                        {studAttDateFilter && (
+                          <button
+                            onClick={() => { setStudAttDateFilter(''); setReportsPage(1); }}
+                            className="text-slate-400 hover:text-rose-500 font-bold ml-1 text-xs"
+                            title="Reset Filter Tanggal"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+
                       {/* Class Filter */}
                       <select
                         value={studAttClassFilter}
@@ -3599,37 +3706,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                       Menampilkan <span className="font-bold text-slate-700">{Math.min((currentReportsPage - 1) * itemsPerPage + 1, activeList.length)}</span> - <span className="font-bold text-slate-700">{Math.min(currentReportsPage * itemsPerPage, activeList.length)}</span> dari <span className="font-bold text-slate-700">{activeList.length}</span> laporan
                     </p>
                     
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => setReportsPage(prev => Math.max(prev - 1, 1))}
-                        disabled={currentReportsPage === 1}
-                        className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                      >
-                        <ChevronLeft className="w-4 h-4" />
-                      </button>
-                      
-                      {Array.from({ length: totalReportsPages }, (_, i) => i + 1).map((pg) => (
-                        <button
-                          key={pg}
-                          onClick={() => setReportsPage(pg)}
-                          className={`w-7 h-7 text-xs font-bold rounded-lg transition-all ${
-                            currentReportsPage === pg
-                              ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
-                              : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 font-semibold'
-                          }`}
-                        >
-                          {pg}
-                        </button>
-                      ))}
-
-                      <button
-                        onClick={() => setReportsPage(prev => Math.min(prev + 1, totalReportsPages))}
-                        disabled={currentReportsPage === totalReportsPages}
-                        className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                      >
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                    </div>
+                    {renderSmartPagination(currentReportsPage, totalReportsPages, setReportsPage)}
                   </div>
                 )}
 

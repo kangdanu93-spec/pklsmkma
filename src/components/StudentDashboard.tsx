@@ -106,21 +106,25 @@ export default function StudentDashboard({ student, instansiList, announcements,
   const fetchStudentData = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      // Users
-      const resUsers = await dbGetUsers();
+      const [
+        resUsers,
+        resJour,
+        resAtt,
+        resPlace,
+        resEval
+      ] = await Promise.all([
+        dbGetUsers().catch(() => ({ data: [] })),
+        dbGetJournals().catch(() => ({ data: [] })),
+        dbGetAttendance().catch(() => ({ data: [] })),
+        dbGetPlacements().catch(() => ({ data: [] })),
+        dbGetEvaluations().catch(() => ({ data: [] }))
+      ]);
+
       setUsers(resUsers.data || []);
+      setJournals((resJour.data || []).filter(j => j.id_siswa === student.id));
+      setAttendanceLogs((resAtt.data || []).filter(a => a.id_siswa === student.id));
 
-      // Journals
-      const resJour = await dbGetJournals();
-      setJournals(resJour.data.filter(j => j.id_siswa === student.id));
-
-      // Attendance
-      const resAtt = await dbGetAttendance();
-      setAttendanceLogs(resAtt.data.filter(a => a.id_siswa === student.id));
-
-      // Placement
-      const resPlace = await dbGetPlacements();
-      const myPlace = resPlace.data.find(p => p.id_siswa === student.id);
+      const myPlace = (resPlace.data || []).find(p => p.id_siswa === student.id);
       setPlacement(myPlace || null);
       if (myPlace) {
         setApplyInstansiId(myPlace.id_instansi);
@@ -130,9 +134,7 @@ export default function StudentDashboard({ student, instansiList, announcements,
         setApplyInstansiId(instansiList[0].id);
       }
 
-      // Evaluation
-      const resEval = await dbGetEvaluations();
-      const myEval = resEval.data.find(e => e.id_siswa === student.id);
+      const myEval = (resEval.data || []).find(e => e.id_siswa === student.id);
       setEvaluation(myEval || null);
     } catch (e) {
       console.error(e);

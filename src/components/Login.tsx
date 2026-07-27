@@ -128,11 +128,7 @@ export const Login: React.FC<LoginProps> = ({
               return;
             }
           } else {
-            if (correctPassword === '[SECURED BY SUPABASE AUTH]') {
-              setError('Kata sandi salah! Gunakan "password123" atau Nomor Induk/NISN Anda sebagai sandi default.');
-            } else {
-              setError('Kata sandi yang Anda masukkan salah!');
-            }
+            setError('Kata sandi yang Anda masukkan salah!');
           }
         } else {
           let errorMsg = 'Akun dengan identitas tersebut tidak ditemukan!';

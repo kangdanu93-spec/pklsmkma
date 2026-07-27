@@ -93,10 +93,11 @@ export default function App() {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      if (loadGlobalDataRef.current) {
+      // Only poll when window is visible to prevent lagging inactive tabs and network thrashing
+      if (document.visibilityState === 'visible' && loadGlobalDataRef.current) {
         loadGlobalDataRef.current(true);
       }
-    }, 5000);
+    }, 15000);
 
     return () => clearInterval(interval);
   }, []);
@@ -121,12 +122,35 @@ export default function App() {
         setSbDetails(null);
       }
 
-      // 2. Fetch all collections
-      const resUsers = await dbGetUsers();
-      setUsers(resUsers.data);
+      // 2. Fetch all collections concurrently in parallel for max performance
+      const [
+        resUsers,
+        resInst,
+        resPlace,
+        resJour,
+        resAtt,
+        resEvals,
+        resAnns
+      ] = await Promise.all([
+        dbGetUsers().catch(() => ({ data: [], fromSupabase: false })),
+        dbGetInstansi().catch(() => ({ data: [], fromSupabase: false })),
+        dbGetPlacements().catch(() => ({ data: [], fromSupabase: false })),
+        dbGetJournals().catch(() => ({ data: [], fromSupabase: false })),
+        dbGetAttendance().catch(() => ({ data: [], fromSupabase: false })),
+        dbGetEvaluations().catch(() => ({ data: [], fromSupabase: false })),
+        dbGetAnnouncements().catch(() => ({ data: [], fromSupabase: false }))
+      ]);
+
+      setUsers(resUsers.data || []);
+      setInstansiList(resInst.data || []);
+      setPlacements(resPlace.data || []);
+      setJournals(resJour.data || []);
+      setAttendanceLogs(resAtt.data || []);
+      setEvaluations(resEvals.data || []);
+      setAnnouncements(resAnns.data || []);
 
       // Keep current logged-in user profile updated with the latest DB records in real-time
-      if (currentUser) {
+      if (currentUser && resUsers.data) {
         const freshUser = resUsers.data.find(u => u.id === currentUser.id);
         if (freshUser && JSON.stringify(freshUser) !== JSON.stringify(currentUser)) {
           setCurrentUser(freshUser);
@@ -138,24 +162,6 @@ export default function App() {
       } else {
         setIsUsingLocalStorageFallback(false);
       }
-
-      const resInst = await dbGetInstansi();
-      setInstansiList(resInst.data);
-
-      const resPlace = await dbGetPlacements();
-      setPlacements(resPlace.data);
-
-      const resJour = await dbGetJournals();
-      setJournals(resJour.data);
-
-      const resAtt = await dbGetAttendance();
-      setAttendanceLogs(resAtt.data);
-
-      const resEvals = await dbGetEvaluations();
-      setEvaluations(resEvals.data);
-
-      const resAnns = await dbGetAnnouncements();
-      setAnnouncements(resAnns.data);
 
       // 3. Restore session if stored in localStorage or Supabase Auth
       let sessionUserFound = false;

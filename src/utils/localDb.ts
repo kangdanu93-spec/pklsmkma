@@ -75,9 +75,20 @@ CREATE TABLE IF NOT EXISTS pkl_attendance (
   keterangan TEXT,
   status_verifikasi TEXT NOT NULL DEFAULT 'pending' CHECK (status_verifikasi IN ('pending', 'disetujui', 'ditolak')),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-  UNIQUE(id_siswa, tanggal)
+  CONSTRAINT pkl_attendance_siswa_tanggal_key UNIQUE (id_siswa, tanggal)
 );
-ALTER TABLE pkl_attendance ADD CONSTRAINT pkl_attendance_siswa_tanggal_key UNIQUE (id_siswa, tanggal);
+
+-- Penanganan aman untuk constraint unik pkl_attendance tanpa throw error jika sudah pernah dibuat
+DO $$
+BEGIN
+  BEGIN
+    ALTER TABLE pkl_attendance ADD CONSTRAINT pkl_attendance_siswa_tanggal_key UNIQUE (id_siswa, tanggal);
+  EXCEPTION
+    WHEN duplicate_object THEN NULL;
+    WHEN duplicate_table THEN NULL;
+    WHEN OTHERS THEN NULL;
+  END;
+END $$;
 
 -- 6. TABEL EVALUASI / NILAI AKHIR
 CREATE TABLE IF NOT EXISTS pkl_evaluations (

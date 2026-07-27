@@ -155,10 +155,27 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
     if (!silent) setLoading(true);
     setErrorText(null);
     try {
-      const allUsers = await dbGetUsers().catch(err => {
-        console.error("Failed to fetch users:", err);
-        return { data: [] };
-      });
+      const [
+        allUsers,
+        resJour,
+        resAtt,
+        resEvals,
+        resAnns,
+        resPlacements,
+        resMon
+      ] = await Promise.all([
+        dbGetUsers().catch(err => {
+          console.error("Failed to fetch users:", err);
+          return { data: [] };
+        }),
+        dbGetJournals().catch(() => ({ data: [] })),
+        dbGetAttendance().catch(() => ({ data: [] })),
+        dbGetEvaluations().catch(() => ({ data: [] })),
+        dbGetAnnouncements().catch(() => ({ data: [] })),
+        dbGetPlacements().catch(() => ({ data: [] })),
+        dbGetTeacherMonitorings().catch(() => ({ data: [] }))
+      ]);
+
       const usersList = Array.isArray(allUsers?.data) ? allUsers.data : [];
       // Filter students assigned to this teacher
       const myStudents = usersList.filter(u => u && u.role === 'siswa' && u.id_pembimbing === teacher.id);
@@ -175,22 +192,12 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
         }
       }
 
-      const resJour = await dbGetJournals().catch(() => ({ data: [] }));
       setJournals(Array.isArray(resJour?.data) ? resJour.data : []);
-
-      const resAtt = await dbGetAttendance().catch(() => ({ data: [] }));
       setAttendanceLogs(Array.isArray(resAtt?.data) ? resAtt.data : []);
-
-      const resEvals = await dbGetEvaluations().catch(() => ({ data: [] }));
       setEvaluations(Array.isArray(resEvals?.data) ? resEvals.data : []);
-
-      const resAnns = await dbGetAnnouncements().catch(() => ({ data: [] }));
       setAnnouncements(Array.isArray(resAnns?.data) ? resAnns.data : []);
-
-      const resPlacements = await dbGetPlacements().catch(() => ({ data: [] }));
       setPlacements(Array.isArray(resPlacements?.data) ? resPlacements.data : []);
 
-      const resMon = await dbGetTeacherMonitorings().catch(() => ({ data: [] }));
       const monList = Array.isArray(resMon?.data) ? resMon.data : [];
       setMonitorings(monList.filter(m => m && m.id_guru === teacher.id));
 

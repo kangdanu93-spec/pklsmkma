@@ -53,10 +53,21 @@ export default function IndustryDashboard({ industry, instansiList, refreshCount
         return;
       }
 
-      // Fetch users and find students in this specific company
-      const allUsers = await dbGetUsers();
-      const myStudents = allUsers.data.filter(
-        u => u.role === 'siswa' && u.id_instansi === industry.id_instansi
+      const [
+        allUsers,
+        resJour,
+        resAtt,
+        resEvals
+      ] = await Promise.all([
+        dbGetUsers().catch(() => ({ data: [] })),
+        dbGetJournals().catch(() => ({ data: [] })),
+        dbGetAttendance().catch(() => ({ data: [] })),
+        dbGetEvaluations().catch(() => ({ data: [] }))
+      ]);
+
+      const usersList = Array.isArray(allUsers?.data) ? allUsers.data : [];
+      const myStudents = usersList.filter(
+        u => u && u.role === 'siswa' && u.id_instansi === industry.id_instansi
       );
       setStudents(myStudents);
 
@@ -71,14 +82,9 @@ export default function IndustryDashboard({ industry, instansiList, refreshCount
         }
       }
 
-      const resJour = await dbGetJournals();
-      setJournals(resJour.data);
-
-      const resAtt = await dbGetAttendance();
-      setAttendanceLogs(resAtt.data);
-
-      const resEvals = await dbGetEvaluations();
-      setEvaluations(resEvals.data);
+      setJournals(resJour.data || []);
+      setAttendanceLogs(resAtt.data || []);
+      setEvaluations(resEvals.data || []);
 
     } catch (e) {
       console.error(e);
