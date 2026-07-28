@@ -197,7 +197,15 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
       setPlacements(Array.isArray(resPlacements?.data) ? resPlacements.data : []);
 
       const monList = Array.isArray(resMon?.data) ? resMon.data : [];
-      setMonitorings(monList.filter(m => m && m.id_guru === teacher.id));
+      setMonitorings(monList.filter(m => 
+        m && (
+          m.id_guru === teacher.id || 
+          m.id_guru === teacher.email || 
+          m.id_guru === teacher.nomor_induk ||
+          m.nama_guru === teacher.nama ||
+          (teacher.nama && m.nama_guru && m.nama_guru.toLowerCase().trim() === teacher.nama.toLowerCase().trim())
+        )
+      ));
 
     } catch (e: any) {
       console.error("Error loading teacher data:", e);

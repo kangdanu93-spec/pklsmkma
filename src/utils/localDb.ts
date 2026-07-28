@@ -1737,6 +1737,9 @@ export async function dbDeleteClass(id: string): Promise<{ success: boolean, fro
 
 export async function dbGetTeacherMonitorings(): Promise<{ data: TeacherMonitoring[], fromSupabase: boolean }> {
   const sb = getSupabaseClient();
+  let allFetched: TeacherMonitoring[] = [];
+  let fetchedFromSupabase = false;
+
   if (sb) {
     const candidateTables = [
       'pkl_teacher_monitoring',
@@ -1750,43 +1753,27 @@ export async function dbGetTeacherMonitorings(): Promise<{ data: TeacherMonitori
     for (const tableName of candidateTables) {
       try {
         const { data, error } = await sb.from(tableName).select('*');
-        if (!error && Array.isArray(data)) {
+        if (!error && Array.isArray(data) && data.length > 0) {
+          fetchedFromSupabase = true;
           const normalized = data.map((item: any) => ({
-            id: String(item.id || item.monitoring_id || generateUUID()),
-            id_guru: item.id_guru || item.guru_id || item.email_guru || item.guru_email || item.user_id || '',
-            nama_guru: item.nama_guru || item.guru_nama || item.guru || item.nama || '',
+            id: String(item.id || item.monitoring_id || item.id_monitoring || generateUUID()),
+            id_guru: item.id_guru || item.guru_id || item.email_guru || item.guru_email || item.user_id || item.id_user || item.nip || '',
+            nama_guru: item.nama_guru || item.guru_nama || item.guru || item.nama || item.nama_pembimbing || item.pembimbing || '',
             tanggal: item.tanggal || item.tgl || item.date || (item.created_at ? String(item.created_at).split('T')[0] : ''),
-            jam_monitoring: item.jam_monitoring || item.jam || item.waktu || item.time || '',
-            tipe_monitoring: item.tipe_monitoring || item.tipe || item.type || item.tipeMonitoring || 'Monitoring 1',
-            latitude: item.latitude != null ? Number(item.latitude) : (item.lat != null ? Number(item.lat) : undefined),
-            longitude: item.longitude != null ? Number(item.longitude) : (item.lng != null ? Number(item.lng) : (item.long != null ? Number(item.long) : undefined)),
-            foto_url: item.foto_url || item.foto || item.bukti || item.image_url || item.url_foto || undefined,
+            jam_monitoring: item.jam_monitoring || item.jam || item.waktu || item.time || item.jam_kunjungan || '',
+            tipe_monitoring: item.tipe_monitoring || item.tipe || item.type || item.tipeMonitoring || item.tipe_kunjungan || item.kunjungan || 'Monitoring 1',
+            latitude: item.latitude != null ? Number(item.latitude) : (item.lat != null ? Number(item.lat) : (item.lat_gps != null ? Number(item.lat_gps) : undefined)),
+            longitude: item.longitude != null ? Number(item.longitude) : (item.lng != null ? Number(item.lng) : (item.long != null ? Number(item.long) : (item.lng_gps != null ? Number(item.lng_gps) : undefined))),
+            foto_url: item.foto_url || item.foto || item.bukti || item.image_url || item.url_foto || item.foto_bukti || undefined,
             catatan: item.catatan || item.keterangan || item.catatan_kunjungan || item.notes || item.deskripsi || undefined,
-            id_siswa: item.id_siswa || item.siswa_id || item.id_instansi || item.instansi_id || undefined,
+            id_siswa: item.id_siswa || item.siswa_id || undefined,
             nama_siswa: item.nama_siswa || item.siswa || item.nama_siswa_monitored || undefined,
-            nama_instansi: item.nama_instansi || item.instansi || item.perusahaan || item.nama_perusahaan || undefined,
+            id_instansi: item.id_instansi || item.instansi_id || undefined,
+            nama_instansi: item.nama_instansi || item.instansi || item.perusahaan || item.nama_perusahaan || item.dudi || item.nama_dudi || undefined,
             created_at: item.created_at
           }));
 
-          // Sort by tanggal & jam_monitoring descending (latest first)
-          normalized.sort((a, b) => {
-            const timeA = `${a.tanggal || ''} ${a.jam_monitoring || ''}`;
-            const timeB = `${b.tanggal || ''} ${b.jam_monitoring || ''}`;
-            return timeB.localeCompare(timeA);
-          });
-
-          // Deduplicate exact duplicate records if any exist in DB
-          const seen = new Set<string>();
-          const uniqueData: TeacherMonitoring[] = [];
-          for (const item of normalized) {
-            const key = `${item.id_guru || item.nama_guru}_${item.nama_instansi || item.id_siswa}_${item.tanggal}_${item.tipe_monitoring}`;
-            if (!seen.has(key)) {
-              seen.add(key);
-              uniqueData.push(item as TeacherMonitoring);
-            }
-          }
-
-          return { data: uniqueData, fromSupabase: true };
+          allFetched.push(...normalized);
         }
       } catch (e) {
         // try next table candidate
@@ -1794,21 +1781,31 @@ export async function dbGetTeacherMonitorings(): Promise<{ data: TeacherMonitori
     }
   }
 
+  // Combine with local storage data as fallback/supplement
   const localData = localDb.get<TeacherMonitoring>('SIM_PKL_TEACHER_MONITORING');
-  const arr = Array.isArray(localData) ? localData : [];
-  
-  // Deduplicate local data
-  const seenLocal = new Set<string>();
-  const uniqueLocal: TeacherMonitoring[] = [];
-  for (const item of arr) {
-    const key = `${item.id_guru || item.nama_guru}_${item.nama_instansi || item.id_siswa}_${item.tanggal}_${item.tipe_monitoring}`;
-    if (!seenLocal.has(key)) {
-      seenLocal.add(key);
-      uniqueLocal.push(item);
+  const arrLocal = Array.isArray(localData) ? localData : [];
+
+  const combined = [...allFetched, ...arrLocal];
+
+  // Sort by tanggal & jam_monitoring descending (latest first)
+  combined.sort((a, b) => {
+    const timeA = `${a.tanggal || ''} ${a.jam_monitoring || ''}`;
+    const timeB = `${b.tanggal || ''} ${b.jam_monitoring || ''}`;
+    return timeB.localeCompare(timeA);
+  });
+
+  // Deduplicate by ID or full unique attributes
+  const seen = new Set<string>();
+  const uniqueData: TeacherMonitoring[] = [];
+  for (const item of combined) {
+    const key = item.id || `${item.id_guru}_${item.nama_guru}_${item.nama_instansi}_${item.tanggal}_${item.tipe_monitoring}_${item.jam_monitoring}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueData.push(item);
     }
   }
 
-  return { data: uniqueLocal, fromSupabase: false };
+  return { data: uniqueData, fromSupabase: fetchedFromSupabase };
 }
 
 export async function dbSaveTeacherMonitoring(monitoring: TeacherMonitoring): Promise<{ success: boolean, data?: TeacherMonitoring, fromSupabase: boolean, error?: string }> {

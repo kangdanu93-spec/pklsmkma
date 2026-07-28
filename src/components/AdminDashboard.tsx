@@ -1052,13 +1052,32 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
 
   const compileTeacherMonitoringReport = () => {
     return (teacherMonitorings || []).map(mon => {
-      const teacher = users.find(u => (u.id === mon.id_guru || u.nama === mon.nama_guru || u.email === mon.id_guru) && u.role === 'guru');
+      const teacher = users.find(u => 
+        u && u.role === 'guru' && (
+          u.id === mon.id_guru || 
+          u.email === mon.id_guru || 
+          u.nomor_induk === mon.id_guru ||
+          (u.nama && mon.nama_guru && u.nama.toLowerCase().trim() === mon.nama_guru.toLowerCase().trim())
+        )
+      );
       const tipeVal = mon.tipe_monitoring || (mon as any).tipe || (mon as any).tipeMonitoring || (mon as any).type;
       
       const teacherName = mon.nama_guru || teacher?.nama || 'Guru Pembimbing';
-      const nipVal = teacher?.nomor_induk || (mon as any).nip || '-';
-      const instansiName = mon.nama_instansi || (mon as any).instansi || (mon as any).perusahaan || '-';
-      const siswaName = mon.nama_siswa || (mon as any).siswa || '-';
+      const nipVal = teacher?.nomor_induk || (mon as any).nip || (mon.id_guru !== teacher?.id ? mon.id_guru : '-') || '-';
+      
+      let instansiName = mon.nama_instansi || (mon as any).instansi || (mon as any).perusahaan || '';
+      if (!instansiName || instansiName === '-') {
+        const inst = instansiList.find(i => i.id === mon.id_instansi || i.id === mon.id_siswa);
+        if (inst) instansiName = inst.nama_instansi;
+      }
+      if (!instansiName) instansiName = '-';
+
+      let siswaName = mon.nama_siswa || (mon as any).siswa || '';
+      if (!siswaName || siswaName === '-') {
+        const student = users.find(u => u.id === mon.id_siswa);
+        if (student) siswaName = student.nama;
+      }
+      if (!siswaName) siswaName = '-';
 
       return {
         id: mon.id,
