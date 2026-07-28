@@ -1728,26 +1728,107 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
           {/* TAB 0: DASHBOARD MONITORING PKL (OVERVIEW) */}
           {activeTab === 'overview' && (() => {
             const todayStr = new Date().toISOString().split('T')[0];
-            const realStudentsCount = users.filter(u => u.role === 'siswa').length;
-            const displayStudentsCount = realStudentsCount > 0 ? realStudentsCount : 425;
+            const realStudents = users.filter(u => u.role === 'siswa');
+            const realStudentsCount = realStudents.length;
             
             const realCompaniesCount = instansiList.length;
-            const displayCompaniesCount = realCompaniesCount > 0 ? realCompaniesCount : 58;
-
-            const realTeachersCount = users.filter(u => u.role === 'guru').length;
-            const displayTeachersCount = realTeachersCount > 0 ? realTeachersCount : 24;
+            const realTeachers = users.filter(u => u.role === 'guru');
+            const realTeachersCount = realTeachers.length;
 
             const todayMonList = teacherMonitorings.filter(m => m.tanggal === todayStr || (m.tanggal && m.tanggal.includes(todayStr)));
-            const displayTodayMonCount = todayMonList.length > 0 ? todayMonList.length : (teacherMonitorings.length > 0 ? Math.min(teacherMonitorings.length, 18) : 18);
+            const displayTodayMonCount = todayMonList.length;
 
             const todayAttList = attendance.filter(a => a.tanggal === todayStr);
-            const displayHadir = todayAttList.filter(a => a.status === 'hadir').length || (attendance.length > 0 ? Math.round(displayStudentsCount * 0.93) : 398);
-            const displayAlpha = todayAttList.filter(a => ['sakit', 'izin', 'alpha'].includes(a.status)).length || 8;
-            const displayLate = todayAttList.filter(a => a.status === 'terlambat' || a.status_verifikasi === 'pending').length || 19;
-            const displayJournals = attendance.filter(a => (a.catatan && a.catatan.trim() !== '') || (a.jurnal && a.jurnal.trim() !== '')).length || 356;
+            const displayHadir = todayAttList.filter(a => a.status === 'hadir').length;
+            const displayAlpha = todayAttList.filter(a => ['sakit', 'izin', 'alfa', 'alpha'].includes(a.status)).length;
+            const displayLate = todayAttList.filter(a => a.status === 'terlambat' || a.status_verifikasi === 'pending').length;
+            const displayJournals = attendance.filter(a => (a.catatan && a.catatan.trim() !== '') || (a.jurnal && a.jurnal.trim() !== '') || (a.keterangan && a.keterangan.trim() !== '')).length;
 
-            const unassignedStudents = users.filter(u => u.role === 'siswa' && !u.id_pembimbing).length;
+            const unassignedStudents = realStudents.filter(u => !u.id_pembimbing && !u.id_instansi).length;
+            const assignedStudents = realStudentsCount - unassignedStudents;
             const pendingJournals = attendance.filter(a => a.status_verifikasi === 'pending').length;
+
+            // Compute dynamic weekly attendance chart data
+            const daysOfWeek = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+            const chartDataByDay = daysOfWeek.map((dayName, idx) => {
+              const dayAtt = attendance.filter(a => {
+                if (!a.tanggal) return false;
+                const d = new Date(a.tanggal);
+                const dayIdx = (d.getDay() + 6) % 7;
+                return dayIdx === idx;
+              });
+              const totalAtt = dayAtt.length;
+              const hCount = dayAtt.filter(a => a.status === 'hadir').length;
+              const lCount = dayAtt.filter(a => a.status === 'terlambat').length;
+              const aCount = dayAtt.filter(a => ['sakit', 'izin', 'alfa', 'alpha'].includes(a.status)).length;
+
+              const hadir = totalAtt > 0 ? Math.round((hCount / totalAtt) * 100) : (realStudentsCount > 0 && displayHadir > 0 ? Math.round((displayHadir / realStudentsCount) * 100) : 0);
+              const late = totalAtt > 0 ? Math.round((lCount / totalAtt) * 100) : 0;
+              const alpha = totalAtt > 0 ? Math.round((aCount / totalAtt) * 100) : 0;
+
+              return { day: dayName, hadir, late, alpha, count: totalAtt };
+            });
+
+            const avgHadirPct = attendance.length > 0 
+              ? Math.round((attendance.filter(a => a.status === 'hadir').length / attendance.length) * 100) 
+              : (realStudentsCount > 0 ? Math.round((displayHadir / realStudentsCount) * 100) : 0);
+
+            // Compute dynamic class progress
+            const activeClassesList = classesList.length > 0 ? classesList : [
+              ...new Set(realStudents.map(s => s.kelas).filter(Boolean))
+            ].map(k => ({ id: k!, nama_kelas: k!, jurusan: '' }));
+
+            const classProgressData = activeClassesList.map((cls, idx) => {
+              const classStudents = realStudents.filter(s => s.kelas === cls.nama_kelas);
+              const totalInClass = classStudents.length;
+              const placedInClass = classStudents.filter(s => s.id_instansi || s.id_pembimbing).length;
+              const pct = totalInClass > 0 ? Math.round((placedInClass / totalInClass) * 100) : 0;
+              const colors = ['bg-emerald-500', 'bg-indigo-600', 'bg-sky-500', 'bg-amber-500', 'bg-purple-500'];
+              return {
+                cls: cls.nama_kelas,
+                ratio: `${placedInClass}/${totalInClass}`,
+                totalInClass,
+                placedInClass,
+                pct,
+                color: colors[idx % colors.length]
+              };
+            });
+
+            // Compute dynamic recent activity stream
+            const recentActivities = [
+              ...attendance.slice(-3).map(a => {
+                const student = users.find(u => u.id === a.id_siswa);
+                const inst = instansiList.find(i => i.id === student?.id_instansi);
+                return {
+                  id: a.id,
+                  title: `Absensi ${a.status === 'hadir' ? 'Hadir' : a.status}`,
+                  desc: `${student ? student.nama : 'Siswa'} ${a.jam_masuk ? 'jam ' + a.jam_masuk : ''} ${inst ? 'di ' + inst.nama_instansi : ''}`,
+                  time: a.tanggal || todayStr,
+                  badgeBg: 'bg-emerald-100 text-emerald-700',
+                  icon: CheckCircle2
+                };
+              }),
+              ...teacherMonitorings.slice(-3).map(m => ({
+                id: m.id,
+                title: `Monitoring Guru`,
+                desc: `${m.nama_guru || 'Guru'} - Instansi: ${m.nama_instansi || 'Perusahaan'}`,
+                time: m.tanggal || todayStr,
+                badgeBg: 'bg-amber-100 text-amber-700',
+                icon: MapPin
+              })),
+              ...placements.slice(-3).map(p => {
+                const student = users.find(u => u.id === p.id_siswa);
+                const inst = instansiList.find(i => i.id === p.id_instansi);
+                return {
+                  id: p.id,
+                  title: `Plotting PKL (${p.status})`,
+                  desc: `${student ? student.nama : 'Siswa'} di ${inst ? inst.nama_instansi : 'Instansi'}`,
+                  time: p.tanggal_mulai || todayStr,
+                  badgeBg: 'bg-indigo-100 text-indigo-700',
+                  icon: ClipboardList
+                };
+              })
+            ].slice(0, 5);
 
             return (
               <div className="space-y-6" id="admin-dashboard-overview">
@@ -1855,10 +1936,10 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                         <GraduationCap className="w-5 h-5" />
                       </div>
                     </div>
-                    <strong className="text-2xl font-extrabold text-slate-800 block">{displayStudentsCount}</strong>
+                    <strong className="text-2xl font-extrabold text-slate-800 block">{realStudentsCount}</strong>
                     <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500">
-                      <span>Ter-plot: <strong className="text-indigo-600">{displayStudentsCount - unassignedStudents}</strong></span>
-                      <span className="text-emerald-600 font-bold">{(Math.round(((displayStudentsCount - unassignedStudents) / displayStudentsCount) * 100)) || 95}%</span>
+                      <span>Ter-plot: <strong className="text-indigo-600">{assignedStudents}</strong></span>
+                      <span className="text-emerald-600 font-bold">{realStudentsCount > 0 ? Math.round((assignedStudents / realStudentsCount) * 100) : 0}%</span>
                     </div>
                   </div>
 
@@ -1870,9 +1951,9 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                         <Building2 className="w-5 h-5" />
                       </div>
                     </div>
-                    <strong className="text-2xl font-extrabold text-slate-800 block">{displayCompaniesCount}</strong>
+                    <strong className="text-2xl font-extrabold text-slate-800 block">{realCompaniesCount}</strong>
                     <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500">
-                      <span>Mitra Aktif</span>
+                      <span>Mitra Terdaftar</span>
                       <span className="text-emerald-600 font-bold">100% IDUKA</span>
                     </div>
                   </div>
@@ -1885,10 +1966,10 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                         <UserCheck className="w-5 h-5" />
                       </div>
                     </div>
-                    <strong className="text-2xl font-extrabold text-slate-800 block">{displayTeachersCount}</strong>
+                    <strong className="text-2xl font-extrabold text-slate-800 block">{realTeachersCount}</strong>
                     <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500">
                       <span>Rerata Bimbingan</span>
-                      <span className="text-amber-700 font-bold">~{Math.round(displayStudentsCount / displayTeachersCount) || 18} Siswa</span>
+                      <span className="text-amber-700 font-bold">~{realTeachersCount > 0 ? Math.round(realStudentsCount / realTeachersCount) : 0} Siswa</span>
                     </div>
                   </div>
 
@@ -1903,7 +1984,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                     <strong className="text-2xl font-extrabold text-sky-600 block">{displayTodayMonCount}</strong>
                     <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500">
                       <span>Kunjungan Lapangan</span>
-                      <span className="text-sky-600 font-bold">Terverifikasi</span>
+                      <span className="text-sky-600 font-bold">Database Sync</span>
                     </div>
                   </div>
                 </div>
@@ -1952,7 +2033,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                       <FileEdit className="w-6 h-6" />
                     </div>
                     <div>
-                      <span className="text-[10px] font-bold text-indigo-800 uppercase tracking-wider block">📝 Jurnal Hari Ini</span>
+                      <span className="text-[10px] font-bold text-indigo-800 uppercase tracking-wider block">📝 Total Jurnal/Laporan</span>
                       <strong className="text-xl font-black text-indigo-900">{displayJournals}</strong>
                       <span className="text-[10px] text-indigo-700 font-semibold block">Laporan Kegiatan Terisi</span>
                     </div>
@@ -1969,7 +2050,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                         <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                           <BarChart3 className="w-4 h-4 text-indigo-600" /> Grafik Kehadiran Siswa
                         </h3>
-                        <p className="text-[11px] text-slate-400">Tren kehadiran harian peserta PKL minggu ini.</p>
+                        <p className="text-[11px] text-slate-400">Tren kehadiran harian berdasarkan data absensi di database.</p>
                       </div>
                       <div className="flex bg-slate-100 p-0.5 rounded-lg text-[10px] font-bold">
                         <button
@@ -1998,18 +2079,11 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                         </div>
                       </div>
 
-                      {[
-                        { day: 'Senin', hadir: 95, late: 3, alpha: 2 },
-                        { day: 'Selasa', hadir: 94, late: 4, alpha: 2 },
-                        { day: 'Rabu', hadir: 96, late: 2, alpha: 2 },
-                        { day: 'Kamis', hadir: 92, late: 5, alpha: 3 },
-                        { day: 'Jumat', hadir: 98, late: 1, alpha: 1 },
-                        { day: 'Sabtu', hadir: 90, late: 6, alpha: 4 },
-                      ].map((item, idx) => (
+                      {chartDataByDay.map((item, idx) => (
                         <div key={idx} className="space-y-1">
                           <div className="flex justify-between text-xs font-semibold text-slate-700">
                             <span>{item.day}</span>
-                            <span className="text-[10px] text-slate-400 font-bold">{item.hadir}% Hadir</span>
+                            <span className="text-[10px] text-slate-400 font-bold">{item.hadir}% Hadir ({item.count} Record)</span>
                           </div>
                           <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden flex">
                             <div style={{ width: `${item.hadir}%` }} className="bg-emerald-500 h-full transition-all" title={`Hadir: ${item.hadir}%`} />
@@ -2021,8 +2095,8 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                     </div>
 
                     <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-                      <span>Tingkat Kehadiran Rerata: <strong className="text-emerald-600 font-bold">94.8%</strong></span>
-                      <span className="text-indigo-600 font-semibold">Tercatat di Supabase DB</span>
+                      <span>Tingkat Kehadiran Rerata: <strong className="text-emerald-600 font-bold">{avgHadirPct}%</strong></span>
+                      <span className="text-indigo-600 font-semibold">Data Real Time Database</span>
                     </div>
                   </div>
 
@@ -2036,60 +2110,66 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                         <p className="text-[11px] text-slate-400">Distribusi penempatan siswa di mitra industri IDUKA.</p>
                       </div>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
-                        {displayCompaniesCount} Mitra
+                        {realCompaniesCount} Mitra
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
-                      {/* Donut Chart Visual SVG */}
-                      <div className="sm:col-span-5 flex justify-center py-2">
-                        <div className="relative w-32 h-32 flex items-center justify-center">
-                          <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                            <path className="text-slate-100" strokeWidth="4" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                            {/* IT & Software 38% */}
-                            <path className="text-indigo-600" strokeDasharray="38, 100" strokeWidth="4" strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                            {/* Otomotif 28% */}
-                            <path className="text-emerald-500" strokeDasharray="28, 100" strokeDashoffset="-38" strokeWidth="4" strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                            {/* Media 18% */}
-                            <path className="text-amber-500" strokeDasharray="18, 100" strokeDashoffset="-66" strokeWidth="4" strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                            {/* Bank 16% */}
-                            <path className="text-sky-500" strokeDasharray="16, 100" strokeDashoffset="-84" strokeWidth="4" strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                          </svg>
-                          <div className="absolute text-center">
-                            <span className="text-base font-extrabold text-slate-800 block">{displayStudentsCount}</span>
-                            <span className="text-[9px] text-slate-400 font-bold uppercase block">Siswa</span>
+                    {instansiList.length === 0 ? (
+                      <div className="text-center py-10 text-slate-400 text-xs italic">
+                        Belum ada data instansi/perusahaan di database.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+                        {/* Donut Chart Visual SVG */}
+                        <div className="sm:col-span-5 flex justify-center py-2">
+                          <div className="relative w-32 h-32 flex items-center justify-center">
+                            <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                              <path className="text-slate-100" strokeWidth="4" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                              {instansiList.map((inst, index) => {
+                                const count = realStudents.filter(u => u.id_instansi === inst.id).length;
+                                const pct = realStudentsCount > 0 ? Math.round((count / realStudentsCount) * 100) : 0;
+                                const colors = ['#4f46e5', '#10b981', '#f59e0b', '#0284c7', '#e11d48', '#8b5cf6'];
+                                const strokeColor = colors[index % colors.length];
+                                return (
+                                  <path
+                                    key={inst.id}
+                                    stroke={strokeColor}
+                                    strokeDasharray={`${pct}, 100`}
+                                    strokeWidth="4"
+                                    strokeLinecap="round"
+                                    fill="none"
+                                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                  />
+                                );
+                              })}
+                            </svg>
+                            <div className="absolute text-center">
+                              <span className="text-base font-extrabold text-slate-800 block">{realStudentsCount}</span>
+                              <span className="text-[9px] text-slate-400 font-bold uppercase block">Siswa</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      {/* Legend List */}
-                      <div className="sm:col-span-7 space-y-2 text-xs">
-                        <div className="flex items-center justify-between p-1.5 rounded-lg bg-slate-50">
-                          <span className="flex items-center gap-2 font-medium text-slate-700">
-                            <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 shrink-0" /> Teknologi & Software
-                          </span>
-                          <strong className="text-indigo-600">38% ({Math.round(displayStudentsCount * 0.38)} Siswa)</strong>
-                        </div>
-                        <div className="flex items-center justify-between p-1.5 rounded-lg bg-slate-50">
-                          <span className="flex items-center gap-2 font-medium text-slate-700">
-                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" /> Otomotif & Manufaktur
-                          </span>
-                          <strong className="text-emerald-600">28% ({Math.round(displayStudentsCount * 0.28)} Siswa)</strong>
-                        </div>
-                        <div className="flex items-center justify-between p-1.5 rounded-lg bg-slate-50">
-                          <span className="flex items-center gap-2 font-medium text-slate-700">
-                            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" /> Desain & Media DKV
-                          </span>
-                          <strong className="text-amber-600">18% ({Math.round(displayStudentsCount * 0.18)} Siswa)</strong>
-                        </div>
-                        <div className="flex items-center justify-between p-1.5 rounded-lg bg-slate-50">
-                          <span className="flex items-center gap-2 font-medium text-slate-700">
-                            <span className="w-2.5 h-2.5 rounded-full bg-sky-500 shrink-0" /> Perbankan & BUMN
-                          </span>
-                          <strong className="text-sky-600">16% ({Math.round(displayStudentsCount * 0.16)} Siswa)</strong>
+                        {/* Legend List */}
+                        <div className="sm:col-span-7 space-y-2 text-xs max-h-48 overflow-y-auto pr-1">
+                          {instansiList.map((inst, index) => {
+                            const count = realStudents.filter(u => u.id_instansi === inst.id).length;
+                            const pct = realStudentsCount > 0 ? Math.round((count / realStudentsCount) * 100) : 0;
+                            const dotColors = ['bg-indigo-600', 'bg-emerald-500', 'bg-amber-500', 'bg-sky-500', 'bg-rose-500', 'bg-purple-500'];
+                            const dotColor = dotColors[index % dotColors.length];
+                            return (
+                              <div key={inst.id} className="flex items-center justify-between p-1.5 rounded-lg bg-slate-50">
+                                <span className="flex items-center gap-2 font-medium text-slate-700 truncate pr-2">
+                                  <span className={`w-2.5 h-2.5 rounded-full ${dotColor} shrink-0`} />
+                                  <span className="truncate">{inst.nama_instansi}</span>
+                                </span>
+                                <strong className="text-indigo-600 text-nowrap">{count} Siswa ({pct}%)</strong>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
-                    </div>
+                    )}
                   </div>
 
                   {/* PANEL 3: PROGRESS PKL */}
@@ -2102,29 +2182,26 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                         <p className="text-[11px] text-slate-400">Persentase pendaftaran & bimbingan per rombel kelas.</p>
                       </div>
                       <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
-                        Bulan 2 dari 3
+                        Live Database
                       </span>
                     </div>
 
-                    <div className="space-y-3 text-xs">
-                      {[
-                        { cls: 'XII RPL 1', ratio: '36/36', pct: 100, color: 'bg-emerald-500' },
-                        { cls: 'XII RPL 2', ratio: '34/36', pct: 94, color: 'bg-indigo-600' },
-                        { cls: 'XII TKJ 1', ratio: '32/34', pct: 94, color: 'bg-indigo-600' },
-                        { cls: 'XII TKJ 2', ratio: '30/32', pct: 93, color: 'bg-sky-500' },
-                        { cls: 'XII TKR', ratio: '38/40', pct: 95, color: 'bg-amber-500' },
-                        { cls: 'XII DKV', ratio: '35/36', pct: 97, color: 'bg-emerald-500' },
-                      ].map((item, idx) => (
-                        <div key={idx} className="space-y-1">
-                          <div className="flex justify-between font-semibold text-slate-700 text-[11px]">
-                            <span>{item.cls}</span>
-                            <span className="text-[10px] text-slate-500 font-bold">{item.ratio} Siswa ({item.pct}%)</span>
+                    <div className="space-y-3 text-xs max-h-60 overflow-y-auto pr-1">
+                      {classProgressData.length === 0 ? (
+                        <p className="text-center py-6 text-slate-400 text-xs italic">Belum ada data kelas atau siswa di database.</p>
+                      ) : (
+                        classProgressData.map((item, idx) => (
+                          <div key={idx} className="space-y-1">
+                            <div className="flex justify-between font-semibold text-slate-700 text-[11px]">
+                              <span>{item.cls}</span>
+                              <span className="text-[10px] text-slate-500 font-bold">{item.ratio} Siswa ({item.pct}%)</span>
+                            </div>
+                            <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                              <div style={{ width: `${item.pct}%` }} className={`h-full rounded-full ${item.color} transition-all`} />
+                            </div>
                           </div>
-                          <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                            <div style={{ width: `${item.pct}%` }} className={`h-full rounded-full ${item.color} transition-all`} />
-                          </div>
-                        </div>
-                      ))}
+                        ))
+                      )}
                     </div>
                   </div>
 
@@ -2183,39 +2260,26 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                       <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
                     </div>
 
-                    <div className="space-y-3 text-xs">
-                      <div className="flex items-start gap-3 p-2.5 bg-slate-50 rounded-xl">
-                        <span className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg shrink-0 mt-0.5">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <strong className="text-slate-800 block truncate">Absensi Tepat Waktu</strong>
-                          <p className="text-[11px] text-slate-500 truncate">Siti Aminah (XII DKV) absen masuk di PT. Telkom Indonesia</p>
-                          <span className="text-[9px] text-slate-400 block mt-0.5">2 menit yang lalu</span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-start gap-3 p-2.5 bg-slate-50 rounded-xl">
-                        <span className="p-1.5 bg-indigo-100 text-indigo-700 rounded-lg shrink-0 mt-0.5">
-                          <FileEdit className="w-3.5 h-3.5" />
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <strong className="text-slate-800 block truncate">Jurnal Kegiatan Baru</strong>
-                          <p className="text-[11px] text-slate-500 truncate">Budi Santoso (XII RPL 1) mengirim jurnal kegiatan harian</p>
-                          <span className="text-[9px] text-slate-400 block mt-0.5">10 menit yang lalu</span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-start gap-3 p-2.5 bg-slate-50 rounded-xl">
-                        <span className="p-1.5 bg-amber-100 text-amber-700 rounded-lg shrink-0 mt-0.5">
-                          <MapPin className="w-3.5 h-3.5" />
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <strong className="text-slate-800 block truncate">Monitoring Lapangan Guru</strong>
-                          <p className="text-[11px] text-slate-500 truncate">Drs. Ahmad Hidayat mengunggah log Monitoring 1</p>
-                          <span className="text-[9px] text-slate-400 block mt-0.5">25 menit yang lalu</span>
-                        </div>
-                      </div>
+                    <div className="space-y-3 text-xs max-h-60 overflow-y-auto pr-1">
+                      {recentActivities.length === 0 ? (
+                        <p className="text-center py-6 text-slate-400 text-xs italic">Belum ada aktivitas terbaru di database.</p>
+                      ) : (
+                        recentActivities.map((act) => {
+                          const IconComp = act.icon || CheckCircle2;
+                          return (
+                            <div key={act.id} className="flex items-start gap-3 p-2.5 bg-slate-50 rounded-xl">
+                              <span className={`p-1.5 rounded-lg shrink-0 mt-0.5 ${act.badgeBg}`}>
+                                <IconComp className="w-3.5 h-3.5" />
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <strong className="text-slate-800 block truncate">{act.title}</strong>
+                                <p className="text-[11px] text-slate-500 truncate">{act.desc}</p>
+                                <span className="text-[9px] text-slate-400 block mt-0.5">{act.time}</span>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
                     </div>
                   </div>
 
