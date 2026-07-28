@@ -462,11 +462,38 @@ initializeLocalStorage();
 const localDb = {
   get: <T>(key: string): T[] => {
     initializeLocalStorage();
-    const val = localStorage.getItem(key);
-    return val ? JSON.parse(val) : [];
+    try {
+      const val = localStorage.getItem(key);
+      return val ? JSON.parse(val) : [];
+    } catch (e) {
+      console.warn(`localStorage getItem error for ${key}:`, e);
+      return [];
+    }
   },
   set: <T>(key: string, data: T[]) => {
-    localStorage.setItem(key, JSON.stringify(data));
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+    } catch (e) {
+      console.warn(`localStorage setItem quota exceeded for ${key}, attempting cleanup & lightweight cache:`, e);
+      try {
+        // Strip large base64 image strings to fit in browser localStorage quota
+        const lightweightData = data.map((item: any) => {
+          if (item && typeof item === 'object') {
+            const clone = { ...item };
+            for (const prop of ['foto_url', 'foto_bukti', 'foto', 'bukti', 'image_url']) {
+              if (typeof clone[prop] === 'string' && clone[prop].length > 500 && clone[prop].startsWith('data:image')) {
+                clone[prop] = '[Foto Tersimpan di Cloud]';
+              }
+            }
+            return clone;
+          }
+          return item;
+        });
+        localStorage.setItem(key, JSON.stringify(lightweightData));
+      } catch (e2) {
+        console.error(`localStorage setItem secondary fallback failed for ${key}:`, e2);
+      }
+    }
   }
 };
 
@@ -1753,27 +1780,30 @@ export async function dbGetTeacherMonitorings(): Promise<{ data: TeacherMonitori
     for (const tableName of candidateTables) {
       try {
         const { data, error } = await sb.from(tableName).select('*');
-        if (!error && Array.isArray(data) && data.length > 0) {
+        if (!error && Array.isArray(data)) {
           fetchedFromSupabase = true;
-          const normalized = data.map((item: any) => ({
-            id: String(item.id || item.monitoring_id || item.id_monitoring || generateUUID()),
-            id_guru: item.id_guru || item.guru_id || item.email_guru || item.guru_email || item.user_id || item.id_user || item.nip || '',
-            nama_guru: item.nama_guru || item.guru_nama || item.guru || item.nama || item.nama_pembimbing || item.pembimbing || '',
-            tanggal: item.tanggal || item.tgl || item.date || (item.created_at ? String(item.created_at).split('T')[0] : ''),
-            jam_monitoring: item.jam_monitoring || item.jam || item.waktu || item.time || item.jam_kunjungan || '',
-            tipe_monitoring: item.tipe_monitoring || item.tipe || item.type || item.tipeMonitoring || item.tipe_kunjungan || item.kunjungan || 'Monitoring 1',
-            latitude: item.latitude != null ? Number(item.latitude) : (item.lat != null ? Number(item.lat) : (item.lat_gps != null ? Number(item.lat_gps) : undefined)),
-            longitude: item.longitude != null ? Number(item.longitude) : (item.lng != null ? Number(item.lng) : (item.long != null ? Number(item.long) : (item.lng_gps != null ? Number(item.lng_gps) : undefined))),
-            foto_url: item.foto_url || item.foto || item.bukti || item.image_url || item.url_foto || item.foto_bukti || undefined,
-            catatan: item.catatan || item.keterangan || item.catatan_kunjungan || item.notes || item.deskripsi || undefined,
-            id_siswa: item.id_siswa || item.siswa_id || undefined,
-            nama_siswa: item.nama_siswa || item.siswa || item.nama_siswa_monitored || undefined,
-            id_instansi: item.id_instansi || item.instansi_id || undefined,
-            nama_instansi: item.nama_instansi || item.instansi || item.perusahaan || item.nama_perusahaan || item.dudi || item.nama_dudi || undefined,
-            created_at: item.created_at
-          }));
+          if (data.length > 0) {
+            const normalized = data.map((item: any) => ({
+              id: String(item.id || item.monitoring_id || item.id_monitoring || generateUUID()),
+              id_guru: item.id_guru || item.guru_id || item.email_guru || item.guru_email || item.user_id || item.id_user || item.nip || '',
+              nama_guru: item.nama_guru || item.guru_nama || item.guru || item.nama || item.nama_pembimbing || item.pembimbing || '',
+              tanggal: item.tanggal || item.tgl || item.date || (item.created_at ? String(item.created_at).split('T')[0] : ''),
+              jam_monitoring: item.jam_monitoring || item.jam || item.waktu || item.time || item.jam_kunjungan || '',
+              tipe_monitoring: item.tipe_monitoring || item.tipe || item.type || item.tipeMonitoring || item.tipe_kunjungan || item.kunjungan || 'Monitoring 1',
+              latitude: item.latitude != null ? Number(item.latitude) : (item.lat != null ? Number(item.lat) : (item.lat_gps != null ? Number(item.lat_gps) : undefined)),
+              longitude: item.longitude != null ? Number(item.longitude) : (item.lng != null ? Number(item.lng) : (item.long != null ? Number(item.long) : (item.lng_gps != null ? Number(item.lng_gps) : undefined))),
+              foto_url: item.foto_url || item.foto || item.bukti || item.image_url || item.url_foto || item.foto_bukti || undefined,
+              catatan: item.catatan || item.keterangan || item.catatan_kunjungan || item.notes || item.deskripsi || undefined,
+              id_siswa: item.id_siswa || item.siswa_id || undefined,
+              nama_siswa: item.nama_siswa || item.siswa || item.nama_siswa_monitored || undefined,
+              id_instansi: item.id_instansi || item.instansi_id || undefined,
+              nama_instansi: item.nama_instansi || item.instansi || item.perusahaan || item.nama_perusahaan || item.dudi || item.nama_dudi || undefined,
+              created_at: item.created_at
+            }));
 
-          allFetched.push(...normalized);
+            allFetched.push(...normalized);
+            break; // Stop querying once candidate table with data is found
+          }
         }
       } catch (e) {
         // try next table candidate
@@ -1781,31 +1811,49 @@ export async function dbGetTeacherMonitorings(): Promise<{ data: TeacherMonitori
     }
   }
 
-  // Combine with local storage data as fallback/supplement
+  if (fetchedFromSupabase) {
+    // Sort by tanggal & jam_monitoring descending (latest first)
+    allFetched.sort((a, b) => {
+      const timeA = `${a.tanggal || ''} ${a.jam_monitoring || ''}`;
+      const timeB = `${b.tanggal || ''} ${b.jam_monitoring || ''}`;
+      return timeB.localeCompare(timeA);
+    });
+
+    // Deduplicate by ID or unique key
+    const seen = new Set<string>();
+    const uniqueData: TeacherMonitoring[] = [];
+    for (const item of allFetched) {
+      const key = item.id || `${item.id_guru}_${item.nama_guru}_${item.nama_instansi}_${item.tanggal}_${item.tipe_monitoring}_${item.jam_monitoring}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueData.push(item);
+      }
+    }
+
+    return { data: uniqueData, fromSupabase: true };
+  }
+
+  // Fallback to local storage if Supabase is unavailable or table query failed
   const localData = localDb.get<TeacherMonitoring>('SIM_PKL_TEACHER_MONITORING');
   const arrLocal = Array.isArray(localData) ? localData : [];
 
-  const combined = [...allFetched, ...arrLocal];
-
-  // Sort by tanggal & jam_monitoring descending (latest first)
-  combined.sort((a, b) => {
+  arrLocal.sort((a, b) => {
     const timeA = `${a.tanggal || ''} ${a.jam_monitoring || ''}`;
     const timeB = `${b.tanggal || ''} ${b.jam_monitoring || ''}`;
     return timeB.localeCompare(timeA);
   });
 
-  // Deduplicate by ID or full unique attributes
-  const seen = new Set<string>();
-  const uniqueData: TeacherMonitoring[] = [];
-  for (const item of combined) {
+  const seenLocal = new Set<string>();
+  const uniqueLocal: TeacherMonitoring[] = [];
+  for (const item of arrLocal) {
     const key = item.id || `${item.id_guru}_${item.nama_guru}_${item.nama_instansi}_${item.tanggal}_${item.tipe_monitoring}_${item.jam_monitoring}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      uniqueData.push(item);
+    if (!seenLocal.has(key)) {
+      seenLocal.add(key);
+      uniqueLocal.push(item);
     }
   }
 
-  return { data: uniqueData, fromSupabase: fetchedFromSupabase };
+  return { data: uniqueLocal, fromSupabase: false };
 }
 
 export async function dbSaveTeacherMonitoring(monitoring: TeacherMonitoring): Promise<{ success: boolean, data?: TeacherMonitoring, fromSupabase: boolean, error?: string }> {
@@ -1877,20 +1925,24 @@ export async function dbSaveTeacherMonitoring(monitoring: TeacherMonitoring): Pr
     }
   }
 
-  // Update locally too
-  const monitorings = localDb.get<TeacherMonitoring>('SIM_PKL_TEACHER_MONITORING');
-  const existingIdx = monitorings.findIndex(m => 
-    m.id === monitoring.id || 
-    (m.id_guru === monitoring.id_guru && m.nama_instansi === monitoring.nama_instansi && m.tanggal === monitoring.tanggal && m.tipe_monitoring === monitoring.tipe_monitoring)
-  );
-  
-  if (existingIdx >= 0) {
-    monitorings[existingIdx] = returnedData;
-  } else {
-    monitorings.push(returnedData);
+  // Update locally too (as fallback cache)
+  try {
+    const monitorings = localDb.get<TeacherMonitoring>('SIM_PKL_TEACHER_MONITORING');
+    const existingIdx = monitorings.findIndex(m => 
+      m.id === monitoring.id || 
+      (m.id_guru === monitoring.id_guru && m.nama_instansi === monitoring.nama_instansi && m.tanggal === monitoring.tanggal && m.tipe_monitoring === monitoring.tipe_monitoring)
+    );
+    
+    if (existingIdx >= 0) {
+      monitorings[existingIdx] = returnedData;
+    } else {
+      monitorings.push(returnedData);
+    }
+    
+    localDb.set('SIM_PKL_TEACHER_MONITORING', monitorings);
+  } catch (errLocal) {
+    console.warn('Local storage cache update failed in dbSaveTeacherMonitoring:', errLocal);
   }
-  
-  localDb.set('SIM_PKL_TEACHER_MONITORING', monitorings);
 
   if (!fromSupabase) {
     success = true;
