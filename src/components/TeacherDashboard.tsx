@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Users, FileText, CheckCircle2, XCircle, AlertCircle, Edit, Star, RefreshCw, Send, Trash, Bookmark, Calendar, Check, MessageSquare, MapPin, Camera, Image, Clock, ClipboardList, Loader2 } from 'lucide-react';
 import { PklUser, PklJournal, PklAttendance, PklEvaluation, Announcement, PklInstansi, PklPlacement, MenuAccess, TeacherMonitoring } from '../types';
-import { dbGetUsers, dbGetJournals, dbSaveJournal, dbGetAttendance, dbSaveAttendance, dbGetEvaluations, dbSaveEvaluation, dbGetAnnouncements, dbSaveAnnouncement, dbDeleteAnnouncement, dbGetPlacements, dbGetMenuAccess, dbGetTeacherMonitorings, dbSaveTeacherMonitoring, dbDeleteTeacherMonitoring, generateUUID } from '../utils/localDb';
+import { dbGetUsers, dbGetJournals, dbSaveJournal, dbGetAttendance, dbSaveAttendance, dbGetEvaluations, dbSaveEvaluation, dbGetAnnouncements, dbSaveAnnouncement, dbDeleteAnnouncement, dbGetPlacements, dbGetMenuAccess, dbGetTeacherMonitorings, dbSaveTeacherMonitoring, dbDeleteTeacherMonitoring, generateUUID, localDb } from '../utils/localDb';
 
 interface TeacherDashboardProps {
   teacher: PklUser;
@@ -152,16 +152,13 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
   const fetchTeacherData = async (silent = false) => {
     if (!silent) setLoading(true);
     setErrorText(null);
+
+    const safetyTimer = setTimeout(() => {
+      if (!silent) setLoading(false);
+    }, 2500);
+
     try {
-      const [
-        allUsers,
-        resJour,
-        resAtt,
-        resEvals,
-        resAnns,
-        resPlacements,
-        resMon
-      ] = await Promise.all([
+      const fetchPromise = Promise.all([
         dbGetUsers().catch(err => {
           console.error("Failed to fetch users:", err);
           return { data: [] };
@@ -173,6 +170,21 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
         dbGetPlacements().catch(() => ({ data: [] })),
         dbGetTeacherMonitorings().catch(() => ({ data: [] }))
       ]);
+
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000));
+      const res = await Promise.race([fetchPromise, timeoutPromise]);
+
+      let allUsers: any = { data: localDb.get<PklUser>('SIM_PKL_USERS') };
+      let resJour: any = { data: localDb.get<PklJournal>('SIM_PKL_JOURNALS') };
+      let resAtt: any = { data: localDb.get<PklAttendance>('SIM_PKL_ATTENDANCE') };
+      let resEvals: any = { data: localDb.get<PklEvaluation>('SIM_PKL_EVALUATIONS') };
+      let resAnns: any = { data: localDb.get<Announcement>('SIM_PKL_ANNOUNCEMENTS') };
+      let resPlacements: any = { data: localDb.get<PklPlacement>('SIM_PKL_PLACEMENTS') };
+      let resMon: any = { data: localDb.get<TeacherMonitoring>('SIM_PKL_TEACHER_MONITORING') };
+
+      if (res) {
+        [allUsers, resJour, resAtt, resEvals, resAnns, resPlacements, resMon] = res;
+      }
 
       const usersList = Array.isArray(allUsers?.data) ? allUsers.data : [];
       // Filter students assigned to this teacher
@@ -211,6 +223,7 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
       console.error("Error loading teacher data:", e);
       setErrorText(e?.message || String(e));
     } finally {
+      clearTimeout(safetyTimer);
       setLoading(false);
     }
   };

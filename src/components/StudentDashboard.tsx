@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, BookOpen, Send, CheckCircle, AlertCircle, RefreshCw, Star, Info, FileText, CheckCircle2, XCircle, MapPin, Navigation, Compass, Globe } from 'lucide-react';
 import { PklUser, PklInstansi, PklJournal, PklAttendance, PklPlacement, PklEvaluation, Announcement, MenuAccess } from '../types';
-import { dbGetJournals, dbSaveJournal, dbGetAttendance, dbSaveAttendance, dbGetPlacements, dbSavePlacement, dbGetInstansi, dbGetEvaluations, dbGetMenuAccess, dbGetUsers } from '../utils/localDb';
+import { dbGetJournals, dbSaveJournal, dbGetAttendance, dbSaveAttendance, dbGetPlacements, dbSavePlacement, dbGetInstansi, dbGetEvaluations, dbGetMenuAccess, dbGetUsers, localDb } from '../utils/localDb';
 
 interface StudentDashboardProps {
   student: PklUser;
@@ -105,20 +105,32 @@ export default function StudentDashboard({ student, instansiList, announcements,
 
   const fetchStudentData = async (silent = false) => {
     if (!silent) setLoading(true);
+
+    const safetyTimer = setTimeout(() => {
+      if (!silent) setLoading(false);
+    }, 2500);
+
     try {
-      const [
-        resUsers,
-        resJour,
-        resAtt,
-        resPlace,
-        resEval
-      ] = await Promise.all([
+      const fetchPromise = Promise.all([
         dbGetUsers().catch(() => ({ data: [] })),
         dbGetJournals().catch(() => ({ data: [] })),
         dbGetAttendance().catch(() => ({ data: [] })),
         dbGetPlacements().catch(() => ({ data: [] })),
         dbGetEvaluations().catch(() => ({ data: [] }))
       ]);
+
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000));
+      const res = await Promise.race([fetchPromise, timeoutPromise]);
+
+      let resUsers: any = { data: localDb.get<PklUser>('SIM_PKL_USERS') };
+      let resJour: any = { data: localDb.get<PklJournal>('SIM_PKL_JOURNALS') };
+      let resAtt: any = { data: localDb.get<PklAttendance>('SIM_PKL_ATTENDANCE') };
+      let resPlace: any = { data: localDb.get<PklPlacement>('SIM_PKL_PLACEMENTS') };
+      let resEval: any = { data: localDb.get<PklEvaluation>('SIM_PKL_EVALUATIONS') };
+
+      if (res) {
+        [resUsers, resJour, resAtt, resPlace, resEval] = res;
+      }
 
       setUsers(resUsers.data || []);
       setJournals((resJour.data || []).filter(j => j.id_siswa === student.id));
@@ -139,6 +151,7 @@ export default function StudentDashboard({ student, instansiList, announcements,
     } catch (e) {
       console.error(e);
     } finally {
+      clearTimeout(safetyTimer);
       setLoading(false);
     }
   };

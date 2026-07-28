@@ -9,7 +9,7 @@ import {
   BarChart3, ArrowUpRight, Clock3, Compass
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { PklUser, PklInstansi, PklPlacement, PklEvaluation, Announcement, UserRole, PklClass, MenuAccess } from '../types';
+import { PklUser, PklInstansi, PklPlacement, PklEvaluation, Announcement, UserRole, PklClass, MenuAccess, TeacherMonitoring } from '../types';
 import { 
   dbGetUsers, dbSaveUser, dbDeleteUser, 
   dbGetInstansi, dbSaveInstansi, dbDeleteInstansi, 
@@ -19,7 +19,7 @@ import {
   dbGetAttendance, dbGetClasses, dbSaveClass, dbDeleteClass,
   dbGetMenuAccess, dbSaveMenuAccess, isSuperAdmin,
   syncLocalDataToSupabase, dbGetTeacherMonitorings,
-  dbGetSettings, dbSaveSetting, dbResetSettings
+  dbGetSettings, dbSaveSetting, dbResetSettings, localDb
 } from '../utils/localDb';
 import { isSupabaseConnected } from '../supabaseClient';
 
@@ -308,20 +308,15 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
 
   const fetchAdminData = async (silent = false) => {
     if (!silent) setLoading(true);
+
+    const safetyTimer = setTimeout(() => {
+      if (!silent) setLoading(false);
+    }, 2500);
+
     try {
       fetchPermissionsData();
 
-      const [
-        resUsers,
-        resInst,
-        resPlace,
-        resEvals,
-        resAnns,
-        resAtt,
-        resClasses,
-        resMon,
-        resSettings
-      ] = await Promise.all([
+      const fetchPromise = Promise.all([
         dbGetUsers().catch(() => ({ data: [] })),
         dbGetInstansi().catch(() => ({ data: [] })),
         dbGetPlacements().catch(() => ({ data: [] })),
@@ -333,28 +328,63 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
         dbGetSettings().catch(() => null)
       ]);
 
-      setUsers(resUsers.data || []);
-      setInstansiList(resInst.data || []);
-      setPlacements(resPlace.data || []);
-      setEvaluations(resEvals.data || []);
-      setAnnouncements(resAnns.data || []);
-      setAttendance(resAtt.data || []);
-      setClassesList(resClasses.data || []);
-      setTeacherMonitorings(resMon.data || []);
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000));
+      const res = await Promise.race([fetchPromise, timeoutPromise]);
 
-      if (resSettings) {
-        if (resSettings.kop_atas) setKopAtas(resSettings.kop_atas);
-        if (resSettings.kop_tengah) setKopTengah(resSettings.kop_tengah);
-        if (resSettings.kop_sekolah) setKopSekolah(resSettings.kop_sekolah);
-        if (resSettings.kop_sub) setKopSub(resSettings.kop_sub);
-        if (resSettings.kop_alamat) setKopAlamat(resSettings.kop_alamat);
-        if (resSettings.kop_kontak) setKopKontak(resSettings.kop_kontak);
-        if (resSettings.kop_logo !== undefined) setKopLogo(resSettings.kop_logo);
+      if (res) {
+        const [
+          resUsers,
+          resInst,
+          resPlace,
+          resEvals,
+          resAnns,
+          resAtt,
+          resClasses,
+          resMon,
+          resSettings
+        ] = res;
+
+        setUsers(resUsers.data || []);
+        setInstansiList(resInst.data || []);
+        setPlacements(resPlace.data || []);
+        setEvaluations(resEvals.data || []);
+        setAnnouncements(resAnns.data || []);
+        setAttendance(resAtt.data || []);
+        setClassesList(resClasses.data || []);
+        setTeacherMonitorings(resMon.data || []);
+
+        if (resSettings) {
+          if (resSettings.kop_atas) setKopAtas(resSettings.kop_atas);
+          if (resSettings.kop_tengah) setKopTengah(resSettings.kop_tengah);
+          if (resSettings.kop_sekolah) setKopSekolah(resSettings.kop_sekolah);
+          if (resSettings.kop_sub) setKopSub(resSettings.kop_sub);
+          if (resSettings.kop_alamat) setKopAlamat(resSettings.kop_alamat);
+          if (resSettings.kop_kontak) setKopKontak(resSettings.kop_kontak);
+          if (resSettings.kop_logo !== undefined) setKopLogo(resSettings.kop_logo);
+        }
+      } else {
+        // Fallback to local cache if network/supabase promise timed out
+        setUsers(localDb.get<PklUser>('SIM_PKL_USERS'));
+        setInstansiList(localDb.get<PklInstansi>('SIM_PKL_INSTANSI'));
+        setPlacements(localDb.get<PklPlacement>('SIM_PKL_PLACEMENTS'));
+        setEvaluations(localDb.get<PklEvaluation>('SIM_PKL_EVALUATIONS'));
+        setAnnouncements(localDb.get<Announcement>('SIM_PKL_ANNOUNCEMENTS'));
+        setAttendance(localDb.get<any>('SIM_PKL_ATTENDANCE'));
+        setClassesList(localDb.get<PklClass>('SIM_PKL_CLASSES'));
+        setTeacherMonitorings(localDb.get<TeacherMonitoring>('SIM_PKL_TEACHER_MONITORING'));
       }
-
     } catch (e) {
-      console.error(e);
+      console.error('Error in fetchAdminData:', e);
+      setUsers(localDb.get<PklUser>('SIM_PKL_USERS'));
+      setInstansiList(localDb.get<PklInstansi>('SIM_PKL_INSTANSI'));
+      setPlacements(localDb.get<PklPlacement>('SIM_PKL_PLACEMENTS'));
+      setEvaluations(localDb.get<PklEvaluation>('SIM_PKL_EVALUATIONS'));
+      setAnnouncements(localDb.get<Announcement>('SIM_PKL_ANNOUNCEMENTS'));
+      setAttendance(localDb.get<any>('SIM_PKL_ATTENDANCE'));
+      setClassesList(localDb.get<PklClass>('SIM_PKL_CLASSES'));
+      setTeacherMonitorings(localDb.get<TeacherMonitoring>('SIM_PKL_TEACHER_MONITORING'));
     } finally {
+      clearTimeout(safetyTimer);
       setLoading(false);
     }
   };

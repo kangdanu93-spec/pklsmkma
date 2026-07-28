@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Briefcase, FileText, CheckCircle2, XCircle, Users, Star, RefreshCw, Send, Bookmark, Info, Check, MapPin } from 'lucide-react';
 import { PklUser, PklJournal, PklAttendance, PklEvaluation, PklInstansi, MenuAccess } from '../types';
-import { dbGetUsers, dbGetJournals, dbSaveJournal, dbGetAttendance, dbSaveAttendance, dbGetEvaluations, dbSaveEvaluation, dbGetMenuAccess } from '../utils/localDb';
+import { dbGetUsers, dbGetJournals, dbSaveJournal, dbGetAttendance, dbSaveAttendance, dbGetEvaluations, dbSaveEvaluation, dbGetMenuAccess, localDb } from '../utils/localDb';
 
 interface IndustryDashboardProps {
   industry: PklUser;
@@ -46,24 +46,37 @@ export default function IndustryDashboard({ industry, instansiList, refreshCount
 
   const fetchIndustryData = async (silent = false) => {
     if (!silent) setLoading(true);
+
+    const safetyTimer = setTimeout(() => {
+      if (!silent) setLoading(false);
+    }, 2500);
+
     try {
       if (!industry.id_instansi) {
         setStudents([]);
         setLoading(false);
+        clearTimeout(safetyTimer);
         return;
       }
 
-      const [
-        allUsers,
-        resJour,
-        resAtt,
-        resEvals
-      ] = await Promise.all([
+      const fetchPromise = Promise.all([
         dbGetUsers().catch(() => ({ data: [] })),
         dbGetJournals().catch(() => ({ data: [] })),
         dbGetAttendance().catch(() => ({ data: [] })),
         dbGetEvaluations().catch(() => ({ data: [] }))
       ]);
+
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000));
+      const res = await Promise.race([fetchPromise, timeoutPromise]);
+
+      let allUsers: any = { data: localDb.get<PklUser>('SIM_PKL_USERS') };
+      let resJour: any = { data: localDb.get<PklJournal>('SIM_PKL_JOURNALS') };
+      let resAtt: any = { data: localDb.get<PklAttendance>('SIM_PKL_ATTENDANCE') };
+      let resEvals: any = { data: localDb.get<PklEvaluation>('SIM_PKL_EVALUATIONS') };
+
+      if (res) {
+        [allUsers, resJour, resAtt, resEvals] = res;
+      }
 
       const usersList = Array.isArray(allUsers?.data) ? allUsers.data : [];
       const myStudents = usersList.filter(
@@ -89,6 +102,7 @@ export default function IndustryDashboard({ industry, instansiList, refreshCount
     } catch (e) {
       console.error(e);
     } finally {
+      clearTimeout(safetyTimer);
       setLoading(false);
     }
   };
