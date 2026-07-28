@@ -321,7 +321,7 @@ export default function StudentDashboard({ student, instansiList, announcements,
         </div>
 
         {/* STATS MINI CARD */}
-        <div className="md:col-span-4 grid grid-cols-2 gap-4">
+        <div className="md:col-span-4 flex flex-col gap-4">
           <div className="bg-white p-4 rounded-xl border border-slate-100 flex flex-col justify-between shadow-sm">
             <span className="text-slate-400 text-xs font-semibold uppercase">Presensi (Hadir)</span>
             <div className="flex items-baseline gap-1 mt-2">
@@ -330,17 +330,8 @@ export default function StudentDashboard({ student, instansiList, announcements,
             </div>
             {totalPendingAtt > 0 && <span className="text-[10px] text-amber-600 mt-1">{totalPendingAtt} absensi pending</span>}
           </div>
-          
-          <div className="bg-white p-4 rounded-xl border border-slate-100 flex flex-col justify-between shadow-sm">
-            <span className="text-slate-400 text-xs font-semibold uppercase">Jurnal Disetujui</span>
-            <div className="flex items-baseline gap-1 mt-2">
-              <span className="text-3xl font-bold text-slate-800">{totalJurnalVerified}</span>
-              <span className="text-xs text-slate-500">/ {journals.length}</span>
-            </div>
-            <span className="text-[10px] text-slate-500 mt-1">total jurnal diajukan</span>
-          </div>
 
-          <div className="bg-white p-4 rounded-xl border border-slate-100 flex flex-col justify-between shadow-sm col-span-2">
+          <div className="bg-white p-4 rounded-xl border border-slate-100 flex flex-col justify-between shadow-sm">
             <span className="text-slate-400 text-xs font-semibold uppercase">Rata-rata Nilai</span>
             <div className="flex items-center justify-between mt-2">
               {averageGrade ? (
@@ -651,69 +642,6 @@ export default function StudentDashboard({ student, instansiList, announcements,
             </div>
           )}
 
-          {/* 3. INPUT JURNAL HARIAN */}
-          {/* 3. MENU PENGISIAN JURNAL */}
-          {isFeatureAllowed('siswa_jurnal') && isApproved && (
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6" id="journal-input-section">
-              <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2 mb-4">
-                <BookOpen className="w-5 h-5 text-indigo-600" /> Tulis Jurnal Kegiatan PKL
-              </h3>
-              
-              <form onSubmit={handleAddJournal} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1.5">Tanggal Kegiatan</label>
-                    <input
-                      type="date"
-                      required
-                      value={journalDate}
-                      onChange={(e) => setJournalDate(e.target.value)}
-                      className="w-full px-3.5 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none bg-white"
-                    />
-                  </div>
-                  <div className="flex items-end text-xs text-slate-500 pb-2">
-                    <p className="flex items-center gap-1"><Info className="w-3.5 h-3.5 text-indigo-500" /> Isi kegiatan Anda secara spesifik dan rangkum pembelajarannya.</p>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1.5">Kegiatan / Aktivitas Utama</label>
-                  <input
-                    type="text"
-                    required
-                    value={journalKegiatan}
-                    onChange={(e) => setJournalKegiatan(e.target.value)}
-                    placeholder="Contoh: Memperbaiki jaringan fiber optic, Slicing UI dashboard..."
-                    className="w-full px-3.5 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1.5">Ringkasan Belajar / Capaian Kompetensi</label>
-                  <textarea
-                    rows={3}
-                    required
-                    value={journalRingkasan}
-                    onChange={(e) => setJournalRingkasan(e.target.value)}
-                    placeholder="Rangkum apa yang Anda pelajari hari ini atau kompetensi apa saja yang dicapai..."
-                    className="w-full px-3.5 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none bg-white"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between pt-1">
-                  {journalSuccess && <span className="text-xs text-emerald-600 font-semibold">{journalSuccess}</span>}
-                  <span />
-                  <button
-                    type="submit"
-                    className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
-                  >
-                    <Send className="w-3.5 h-3.5" /> Kirim Jurnal Harian
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
-
           {/* 4. STATUS PENEMPATAN & PLOTTING ADMIN */}
           {!isApproved && (
             <div className="bg-amber-50 border border-amber-200 rounded-2xl shadow-sm p-6 space-y-4" id="apply-placement-section">
@@ -754,61 +682,6 @@ export default function StudentDashboard({ student, instansiList, announcements,
                   *Silakan hubungi Koordinator PKL di Ruang Hubungan Industri jika memiliki pertanyaan atau kendala terkait penempatan.
                 </p>
               </div>
-            </div>
-          )}
-
-          {/* 5. HISTORI JURNAL KEGIATAN */}
-          {isFeatureAllowed('siswa_jurnal') && isApproved && (
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6" id="journals-list-section">
-              <h3 className="text-base font-semibold text-slate-800 mb-4 flex items-center justify-between">
-                <span>Histori Jurnal Kegiatan ({journals.length})</span>
-                <span className="text-xs text-slate-400 font-normal">Diurutkan berdasarkan tanggal terbaru</span>
-              </h3>
-
-              {journals.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 text-sm border-2 border-dashed border-slate-100 rounded-xl">
-                  <BookOpen className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                  Belum ada jurnal yang ditulis.
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {journals.map((j) => (
-                    <div key={j.id} className="p-4 rounded-xl border border-slate-100 hover:border-slate-200 transition-all text-sm space-y-2">
-                      <div className="flex justify-between items-start gap-4">
-                        <div>
-                          <strong className="text-slate-700">{new Date(j.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>
-                          <h4 className="font-semibold text-slate-800 mt-0.5">{j.kegiatan}</h4>
-                        </div>
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                          j.status === 'diverifikasi' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
-                          j.status === 'revisi' ? 'bg-rose-50 text-rose-700 border border-rose-100' :
-                          'bg-amber-50 text-amber-700 border border-amber-100'
-                        }`}>
-                          {j.status === 'diverifikasi' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : j.status === 'revisi' ? <XCircle className="w-3.5 h-3.5 text-rose-500" /> : <Clock className="w-3.5 h-3.5 text-amber-500" />}
-                          {j.status === 'diverifikasi' ? 'Diverifikasi' : j.status === 'revisi' ? 'Revisi' : 'Pending'}
-                        </span>
-                      </div>
-                      
-                      <div className="text-slate-600 bg-slate-50/60 p-3 rounded-lg border border-slate-50 leading-relaxed">
-                        <span className="text-[10px] uppercase font-semibold text-slate-400 block mb-0.5">Ringkasan Pembelajaran:</span>
-                        {j.ringkasan_belajar}
-                      </div>
-
-                      {j.catatan_pembimbing && (
-                        <div className={`p-3 rounded-lg text-xs flex gap-2 border ${
-                          j.status === 'revisi' ? 'bg-rose-50 border-rose-100 text-rose-800' : 'bg-indigo-50 border-indigo-100 text-indigo-800'
-                        }`}>
-                          <Info className="w-4 h-4 shrink-0 mt-0.5" />
-                          <div>
-                            <span className="font-semibold block">{j.status === 'revisi' ? 'Catatan Revisi Pembimbing:' : 'Feedback Pembimbing:'}</span>
-                            <p className="mt-0.5">{j.catatan_pembimbing}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           )}
         </div>
