@@ -445,26 +445,31 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
       const rawResult = event.target?.result as string;
       if (!rawResult) return;
 
-      const img = new Image();
-      img.onload = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
+      // Immediately set monPhoto so the preview renders right away
+      setMonPhoto(rawResult);
 
-          let dataUrl = '';
-          let sizeInKB = 9999;
+      // Reset input element value safely after reading file
+      inputEl.value = '';
 
-          // Multi-pass compression to automatically reduce image size under 240 KB
-          const configs = [
-            { maxDim: 800, quality: 0.75 },
-            { maxDim: 700, quality: 0.65 },
-            { maxDim: 600, quality: 0.55 },
-            { maxDim: 500, quality: 0.5 },
-            { maxDim: 400, quality: 0.4 },
-            { maxDim: 300, quality: 0.3 }
-          ];
+      // Perform background image compression to keep payload lightweight (< 240 KB)
+      try {
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
 
-          if (ctx) {
+            let dataUrl = '';
+            const configs = [
+              { maxDim: 800, quality: 0.75 },
+              { maxDim: 700, quality: 0.65 },
+              { maxDim: 600, quality: 0.55 },
+              { maxDim: 500, quality: 0.5 },
+              { maxDim: 400, quality: 0.4 },
+              { maxDim: 300, quality: 0.3 }
+            ];
+
             for (const cfg of configs) {
               let width = img.width;
               let height = img.height;
@@ -484,36 +489,37 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
               ctx.clearRect(0, 0, width, height);
               ctx.drawImage(img, 0, 0, width, height);
 
-              dataUrl = canvas.toDataURL('image/jpeg', cfg.quality);
-              const base64Str = dataUrl.split(',')[1] || '';
-              sizeInKB = Math.round((base64Str.length * 3 / 4) / 1024);
+              const testUrl = canvas.toDataURL('image/jpeg', cfg.quality);
+              const base64Str = testUrl.split(',')[1] || '';
+              const sizeInKB = Math.round((base64Str.length * 3 / 4) / 1024);
 
+              dataUrl = testUrl;
               if (sizeInKB <= 240) {
                 break;
               }
             }
+
+            if (dataUrl) {
+              setMonPhoto(dataUrl);
+            }
+          } catch (canvasErr) {
+            console.warn('Canvas compression failed, keeping raw image:', canvasErr);
           }
+        };
 
-          if (!dataUrl) {
-            dataUrl = rawResult;
-          }
+        img.onerror = () => {
+          console.warn('Image load error during compression, keeping raw image');
+        };
 
-          setMonPhoto(dataUrl);
-        } catch (err) {
-          console.error('Compression error:', err);
-          setMonPhoto(rawResult);
-        }
-      };
-
-      img.onerror = () => {
-        setMonPhoto(rawResult);
-      };
-
-      img.src = rawResult;
+        img.src = rawResult;
+      } catch (err) {
+        console.warn('Compression setup error:', err);
+      }
     };
 
     reader.onerror = () => {
       alert('Gagal membaca file gambar.');
+      inputEl.value = '';
     };
 
     reader.readAsDataURL(file);
@@ -1215,7 +1221,6 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
                         type="file"
                         accept="image/*"
                         onChange={handlePhotoUpload}
-                        onClick={(e) => { (e.target as HTMLInputElement).value = ''; }}
                         className="hidden"
                       />
                     </div>
