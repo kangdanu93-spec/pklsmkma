@@ -587,6 +587,12 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
             <span className="text-[10px] text-slate-400 block font-semibold uppercase">Siswa Bimbingan</span>
             <strong className="text-2xl text-white block mt-0.5">{students.length}</strong>
           </div>
+          <div className="bg-indigo-900/30 px-4 py-3 rounded-xl border border-indigo-800/50 text-center">
+            <span className="text-[10px] text-indigo-300 block font-semibold uppercase">Jurnal Pending</span>
+            <strong className="text-2xl text-indigo-300 block mt-0.5">
+              {journals.filter(j => j.status === 'pending' && students.some(s => s.id === j.id_siswa)).length}
+            </strong>
+          </div>
         </div>
       </div>
 
@@ -633,6 +639,7 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
               ) : (
                 <div className="space-y-1">
                   {students.map((stud) => {
+                    const hasPendingJour = journals.some(j => j.id_siswa === stud.id && j.status === 'pending');
                     const isSelected = selectedStudent?.id === stud.id;
                     return (
                       <button
@@ -648,6 +655,9 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
                           <p className={`font-semibold ${isSelected ? 'text-white' : 'text-slate-800'}`}>{stud.nama}</p>
                           <p className={`text-[10px] mt-0.5 ${isSelected ? 'text-indigo-200' : 'text-slate-400'}`}>NISN: {stud.nomor_induk}</p>
                         </div>
+                        {hasPendingJour && (
+                          <span className={`w-2.5 h-2.5 rounded-full ${isSelected ? 'bg-white' : 'bg-amber-500 animate-pulse'}`} title="Ada Jurnal Baru!" />
+                        )}
                       </button>
                     );
                   })}
@@ -718,14 +728,120 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
                         {activeStudentAttendance.filter(a => a.status === 'sakit' || a.status === 'izin').length} hari
                       </strong>
                     </div>
+                    <div className="bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-100 text-center">
+                      <span className="text-[9px] text-indigo-500 font-semibold uppercase block">Jurnal</span>
+                      <strong className="text-sm text-indigo-700 block">
+                        {activeStudentJournals.filter(j => j.status === 'diverifikasi').length} / {activeStudentJournals.length}
+                      </strong>
+                    </div>
                   </div>
                 </div>
 
-                {/* TABS OF WORK: KEHADIRAN DAN PENILAIAN */}
+                {/* TABS OF WORK: JURNAL, KEHADIRAN, DAN PENILAIAN */}
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
                   
-                  {/* SUB-SECTION: PRESENSI (7 cols) */}
+                  {/* SUB-SECTION: JURNAL & PRESENSI (7 cols) */}
                   <div className="md:col-span-8 space-y-8">
+                    
+                    {/* JURNAL VERIFICATION PANEL */}
+                    {isFeatureAllowed('guru_jurnal') && (
+                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                      <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center justify-between">
+                        <span>Jurnal Kegiatan Siswa</span>
+                        <span className="text-xs text-slate-400 font-normal">Lakukan verifikasi & beri feedback</span>
+                      </h4>
+
+                      {activeStudentJournals.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic py-6 text-center">Siswa ini belum memposting jurnal kegiatan harian.</p>
+                      ) : (
+                        <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1">
+                          {activeStudentJournals.map((j) => (
+                            <div key={j.id} className="p-4 rounded-xl bg-slate-50/50 border border-slate-100 text-xs space-y-2.5">
+                              <div className="flex justify-between items-start gap-3">
+                                <div>
+                                  <span className="font-bold text-slate-700">{new Date(j.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                                  <h5 className="font-semibold text-slate-800 text-[13px] mt-0.5">{j.kegiatan}</h5>
+                                </div>
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                  j.status === 'diverifikasi' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
+                                  j.status === 'revisi' ? 'bg-rose-50 text-rose-700 border border-rose-100' :
+                                  'bg-amber-50 text-amber-700 border border-amber-100'
+                                }`}>
+                                  {j.status}
+                                </span>
+                              </div>
+
+                              <div className="p-2.5 bg-white rounded-lg border border-slate-100 text-slate-600 leading-relaxed">
+                                <span className="text-[9px] uppercase font-semibold text-slate-400 block mb-0.5">Ringkasan Pembelajaran:</span>
+                                {j.ringkasan_belajar}
+                              </div>
+
+                              {/* Verification Actions */}
+                              {j.status === 'pending' ? (
+                                <div className="space-y-2 pt-1 border-t border-slate-100">
+                                  {activeJournalId === j.id ? (
+                                    <div className="space-y-2">
+                                      <textarea
+                                        rows={2}
+                                        value={journalFeedback}
+                                        onChange={(e) => setJournalFeedback(e.target.value)}
+                                        placeholder="Tambahkan umpan balik, instruksi, atau catatan revisi..."
+                                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none bg-white text-slate-700"
+                                      />
+                                      <div className="flex gap-2 justify-end">
+                                        <button
+                                          onClick={() => setActiveJournalId(null)}
+                                          className="px-2.5 py-1 rounded bg-slate-100 text-slate-600 font-medium"
+                                        >
+                                          Batal
+                                        </button>
+                                        <button
+                                          onClick={() => handleVerifyJournal(j, 'revisi')}
+                                          className="px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-700 text-white font-medium flex items-center gap-1"
+                                        >
+                                          <XCircle className="w-3.5 h-3.5" /> Minta Revisi
+                                        </button>
+                                        <button
+                                          onClick={() => handleVerifyJournal(j, 'diverifikasi')}
+                                          className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-medium flex items-center gap-1"
+                                        >
+                                          <CheckCircle2 className="w-3.5 h-3.5" /> Setujui
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex gap-2 justify-end">
+                                      <button
+                                        onClick={() => {
+                                          setActiveJournalId(j.id);
+                                          setJournalFeedback('');
+                                        }}
+                                        className="px-2.5 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-100 font-medium flex items-center gap-1"
+                                      >
+                                        <MessageSquare className="w-3 h-3 text-slate-500" /> Beri Feedback
+                                      </button>
+                                      <button
+                                        onClick={() => handleVerifyJournal(j, 'diverifikasi')}
+                                        className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center gap-1"
+                                      >
+                                        <CheckCircle2 className="w-3.5 h-3.5" /> Langsung Setujui
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                j.catatan_pembimbing && (
+                                  <p className="text-[11px] text-slate-500 italic bg-white p-2 rounded border border-slate-50">
+                                    <strong>Feedback:</strong> &ldquo;{j.catatan_pembimbing}&rdquo;
+                                  </p>
+                                )
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    )}
 
                     {/* ATTENDANCE APPROVAL PANEL */}
                     {isFeatureAllowed('guru_presensi') && (
