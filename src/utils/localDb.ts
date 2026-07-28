@@ -255,6 +255,39 @@ const INITIAL_CLASSES: PklClass[] = [
   { id: 'class-6', nama_kelas: 'XII DKV', jurusan: 'Desain Komunikasi Visual' }
 ];
 
+const INITIAL_TEACHER_MONITORING: TeacherMonitoring[] = [
+  {
+    id: 'mon-1',
+    id_guru: 'budi@simpkl.com',
+    nama_guru: 'Drs. Budi Santoso',
+    tanggal: '2026-07-02',
+    jam_monitoring: '10:30',
+    tipe_monitoring: 'Monitoring 1',
+    latitude: -6.917464,
+    longitude: 107.619122,
+    foto_url: 'https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&w=600&q=80',
+    catatan: 'Kunjungan monitoring pertama. Siswa Ahmad Fauzi terpantau aktif mengikuti penjelasan supervisor industri.',
+    id_siswa: 'inst-1',
+    nama_siswa: 'Ahmad Fauzi',
+    nama_instansi: 'PT. Solusi Digital Indonesia'
+  },
+  {
+    id: 'mon-2',
+    id_guru: 'sri@simpkl.com',
+    nama_guru: 'Sri Wahyuni M.Kom',
+    tanggal: '2026-07-03',
+    jam_monitoring: '13:15',
+    tipe_monitoring: 'Monitoring 1',
+    latitude: -6.914744,
+    longitude: 107.609810,
+    foto_url: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=600&q=80',
+    catatan: 'Monitoring rutin di Bank Mandiri. Rina Wijaya bertugas di divisi IT Support dengan performa sangat baik.',
+    id_siswa: 'inst-2',
+    nama_siswa: 'Rina Wijaya',
+    nama_instansi: 'Bank Mandiri Cabang Utama'
+  }
+];
+
 // Helper to initialize local storage
 function initializeLocalStorage() {
   const isInitialized = localStorage.getItem('SIM_PKL_INITIALIZED');
@@ -267,16 +300,17 @@ function initializeLocalStorage() {
     localStorage.setItem('SIM_PKL_EVALUATIONS', JSON.stringify(INITIAL_EVALUATIONS));
     localStorage.setItem('SIM_PKL_ANNOUNCEMENTS', JSON.stringify(INITIAL_ANNOUNCEMENTS));
     localStorage.setItem('SIM_PKL_CLASSES', JSON.stringify(INITIAL_CLASSES));
-    localStorage.setItem('SIM_PKL_TEACHER_MONITORING', JSON.stringify([]));
+    localStorage.setItem('SIM_PKL_TEACHER_MONITORING', JSON.stringify(INITIAL_TEACHER_MONITORING));
     localStorage.setItem('SIM_PKL_INITIALIZED', 'true');
   } else {
     // Ensure classes key exists even if app was initialized previously
     if (!localStorage.getItem('SIM_PKL_CLASSES')) {
       localStorage.setItem('SIM_PKL_CLASSES', JSON.stringify(INITIAL_CLASSES));
     }
-    // Ensure teacher monitoring key exists
-    if (!localStorage.getItem('SIM_PKL_TEACHER_MONITORING')) {
-      localStorage.setItem('SIM_PKL_TEACHER_MONITORING', JSON.stringify([]));
+    // Ensure teacher monitoring key exists and is non-empty
+    const existingMon = localStorage.getItem('SIM_PKL_TEACHER_MONITORING');
+    if (!existingMon || existingMon === '[]') {
+      localStorage.setItem('SIM_PKL_TEACHER_MONITORING', JSON.stringify(INITIAL_TEACHER_MONITORING));
     }
     // Force migrate local storage to make sure standard admin and other mock users exist
     try {
@@ -580,6 +614,29 @@ export async function autoSeedSupabase(sb: any) {
           id: cls.id.includes('class-') ? undefined : cls.id,
           nama_kelas: cls.nama_kelas,
           jurusan: cls.jurusan
+        });
+      }
+    }
+
+    // 9. Teacher Monitoring
+    const { data: monCheck, error: monErr } = await sb.from('pkl_teacher_monitoring').select('id');
+    if (!monErr && (!monCheck || monCheck.length === 0)) {
+      console.log('Seeding pkl_teacher_monitoring to Supabase...');
+      for (const mon of INITIAL_TEACHER_MONITORING) {
+        await sb.from('pkl_teacher_monitoring').upsert({
+          id: mon.id.includes('mon-') ? undefined : mon.id,
+          id_guru: mon.id_guru,
+          nama_guru: mon.nama_guru,
+          tanggal: mon.tanggal,
+          jam_monitoring: mon.jam_monitoring,
+          tipe_monitoring: mon.tipe_monitoring,
+          latitude: mon.latitude,
+          longitude: mon.longitude,
+          foto_url: mon.foto_url,
+          catatan: mon.catatan,
+          id_siswa: mon.id_siswa,
+          nama_siswa: mon.nama_siswa,
+          nama_instansi: mon.nama_instansi
         });
       }
     }
@@ -1550,6 +1607,29 @@ export async function syncLocalDataToSupabase(): Promise<{ success: boolean, mes
       console.warn('Skipping table pkl_classes sync - table might not exist in Supabase yet');
     }
 
+    try {
+      const monitorings = localDb.get<TeacherMonitoring>('SIM_PKL_TEACHER_MONITORING');
+      for (const mon of monitorings) {
+        await sb.from('pkl_teacher_monitoring').upsert({
+          id: mon.id.includes('mon-') ? undefined : mon.id,
+          id_guru: mon.id_guru,
+          nama_guru: mon.nama_guru,
+          tanggal: mon.tanggal,
+          jam_monitoring: mon.jam_monitoring,
+          tipe_monitoring: mon.tipe_monitoring,
+          latitude: mon.latitude,
+          longitude: mon.longitude,
+          foto_url: mon.foto_url,
+          catatan: mon.catatan,
+          id_siswa: mon.id_siswa,
+          nama_siswa: mon.nama_siswa,
+          nama_instansi: mon.nama_instansi
+        });
+      }
+    } catch (err) {
+      console.warn('Skipping table pkl_teacher_monitoring sync - table might not exist in Supabase yet');
+    }
+
     return { success: true, message: 'Data lokal berhasil disinkronisasikan ke database Supabase.' };
   } catch (error: any) {
     console.error('Gagal melakukan sinkronisasi data:', error);
@@ -1685,11 +1765,59 @@ export async function dbGetTeacherMonitorings(): Promise<{ data: TeacherMonitori
     try {
       const { data, error } = await sb.from('pkl_teacher_monitoring').select('*').order('tanggal', { ascending: false });
       if (!error && data) {
-        return { data: data as TeacherMonitoring[], fromSupabase: true };
+        if (data.length === 0) {
+          // If Supabase table is empty, check local data or seed initial data
+          const localData = localDb.get<TeacherMonitoring>('SIM_PKL_TEACHER_MONITORING');
+          const dataToSeed = (localData && localData.length > 0) ? localData : INITIAL_TEACHER_MONITORING;
+          if (dataToSeed.length > 0) {
+            for (const item of dataToSeed) {
+              await sb.from('pkl_teacher_monitoring').upsert({
+                id: item.id.includes('mon-') ? undefined : item.id,
+                id_guru: item.id_guru,
+                nama_guru: item.nama_guru,
+                tanggal: item.tanggal,
+                jam_monitoring: item.jam_monitoring,
+                tipe_monitoring: item.tipe_monitoring,
+                latitude: item.latitude,
+                longitude: item.longitude,
+                foto_url: item.foto_url,
+                catatan: item.catatan,
+                id_siswa: item.id_siswa,
+                nama_siswa: item.nama_siswa,
+                nama_instansi: item.nama_instansi
+              });
+            }
+            return { data: dataToSeed, fromSupabase: true };
+          }
+        }
+        // Normalize fields from Supabase to guarantee consistent interface
+        const normalized = data.map((item: any) => ({
+          id: item.id || generateUUID(),
+          id_guru: item.id_guru || item.guru_id || '',
+          nama_guru: item.nama_guru || item.guru_nama || item.guru || '',
+          tanggal: item.tanggal || '',
+          jam_monitoring: item.jam_monitoring || item.jam || '',
+          tipe_monitoring: item.tipe_monitoring || item.tipe || item.type || 'Monitoring 1',
+          latitude: item.latitude ? Number(item.latitude) : undefined,
+          longitude: item.longitude ? Number(item.longitude) : undefined,
+          foto_url: item.foto_url || item.foto || item.bukti || undefined,
+          catatan: item.catatan || item.keterangan || undefined,
+          id_siswa: item.id_siswa || item.siswa_id || item.id_instansi || undefined,
+          nama_siswa: item.nama_siswa || item.siswa || undefined,
+          nama_instansi: item.nama_instansi || item.instansi || item.perusahaan || undefined,
+          created_at: item.created_at
+        }));
+        return { data: normalized as TeacherMonitoring[], fromSupabase: true };
       }
     } catch (e) {}
   }
-  return { data: localDb.get<TeacherMonitoring>('SIM_PKL_TEACHER_MONITORING'), fromSupabase: false };
+
+  let localData = localDb.get<TeacherMonitoring>('SIM_PKL_TEACHER_MONITORING');
+  if (!localData || localData.length === 0) {
+    localData = INITIAL_TEACHER_MONITORING;
+    localDb.set('SIM_PKL_TEACHER_MONITORING', INITIAL_TEACHER_MONITORING);
+  }
+  return { data: localData, fromSupabase: false };
 }
 
 export async function dbSaveTeacherMonitoring(monitoring: TeacherMonitoring): Promise<{ success: boolean, data?: TeacherMonitoring, fromSupabase: boolean, error?: string }> {

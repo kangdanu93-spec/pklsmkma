@@ -1051,19 +1051,25 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
   };
 
   const compileTeacherMonitoringReport = () => {
-    return teacherMonitorings.map(mon => {
-      const teacher = users.find(u => u.id === mon.id_guru && u.role === 'guru');
+    return (teacherMonitorings || []).map(mon => {
+      const teacher = users.find(u => (u.id === mon.id_guru || u.nama === mon.nama_guru || u.email === mon.id_guru) && u.role === 'guru');
       const tipeVal = mon.tipe_monitoring || (mon as any).tipe || (mon as any).tipeMonitoring || (mon as any).type;
+      
+      const teacherName = mon.nama_guru || teacher?.nama || 'Guru Pembimbing';
+      const nipVal = teacher?.nomor_induk || (mon as any).nip || '-';
+      const instansiName = mon.nama_instansi || (mon as any).instansi || (mon as any).perusahaan || '-';
+      const siswaName = mon.nama_siswa || (mon as any).siswa || '-';
+
       return {
         id: mon.id,
         tanggal: mon.tanggal || '-',
-        jam: mon.jam_monitoring || '-',
-        nama_guru: mon.nama_guru || teacher?.nama || 'Guru Tidak Dikenal',
-        nip: teacher?.nomor_induk || '-',
-        instansi: mon.nama_instansi || '-',
+        jam: mon.jam_monitoring || (mon as any).jam || '-',
+        nama_guru: teacherName,
+        nip: nipVal,
+        instansi: instansiName,
         tipe: (tipeVal && tipeVal !== '-') ? tipeVal : 'Monitoring 1',
-        siswa: mon.nama_siswa || '-',
-        catatan: mon.catatan || '-',
+        siswa: siswaName,
+        catatan: mon.catatan || (mon as any).keterangan || '-',
         latitude: mon.latitude,
         longitude: mon.longitude,
         foto_url: mon.foto_url
@@ -1146,16 +1152,35 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
     else if (reportSubTab === 'teacher_attendance') {
       const teacherMonitoringReports = compileTeacherMonitoringReport();
       const filteredTeacherMonitoring = teacherMonitoringReports.filter(mon => {
-        const query = reportsSearch.toLowerCase();
-        const matchesQuery = mon.nama_guru.toLowerCase().includes(query) ||
-                             mon.instansi.toLowerCase().includes(query) ||
-                             mon.siswa.toLowerCase().includes(query);
-        const matchesGuru = !teachAttGuruFilter || mon.nama_guru === teachAttGuruFilter;
-        const matchesType = !teachAttTypeFilter || mon.tipe === teachAttTypeFilter;
+        const query = (reportsSearch || '').toLowerCase().trim();
+        const matchesQuery = !query ||
+                             (mon.nama_guru || '').toLowerCase().includes(query) ||
+                             (mon.instansi || '').toLowerCase().includes(query) ||
+                             (mon.siswa || '').toLowerCase().includes(query) ||
+                             (mon.catatan || '').toLowerCase().includes(query) ||
+                             (mon.nip || '').toLowerCase().includes(query);
+        const matchesGuru = !teachAttGuruFilter ||
+                            (mon.nama_guru || '').toLowerCase().includes(teachAttGuruFilter.toLowerCase()) ||
+                            teachAttGuruFilter.toLowerCase().includes((mon.nama_guru || '').toLowerCase());
+        const matchesType = !teachAttTypeFilter ||
+                            (mon.tipe || '').toLowerCase() === teachAttTypeFilter.toLowerCase() ||
+                            (mon.tipe || '').toLowerCase().includes(teachAttTypeFilter.toLowerCase());
         let matchesMonth = true;
         if (teachAttMonthFilter) {
-          const month = mon.tanggal.split('-')[1];
-          matchesMonth = month === teachAttMonthFilter;
+          const strDate = String(mon.tanggal || '');
+          if (strDate.includes('-')) {
+            const parts = strDate.split('-');
+            if (parts.length >= 2) {
+              const month = parts[1].padStart(2, '0');
+              matchesMonth = (month === teachAttMonthFilter.padStart(2, '0'));
+            }
+          } else if (strDate.includes('/')) {
+            const parts = strDate.split('/');
+            if (parts.length >= 2) {
+              const month = parts[1].padStart(2, '0');
+              matchesMonth = (month === teachAttMonthFilter.padStart(2, '0'));
+            }
+          }
         }
         return matchesQuery && matchesGuru && matchesType && matchesMonth;
       });
@@ -3987,17 +4012,36 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
 
             const teacherMonitoringReports = compileTeacherMonitoringReport();
             const filteredTeacherMonitoring = teacherMonitoringReports.filter(mon => {
-              const query = reportsSearch.toLowerCase();
-              const matchesQuery = mon.nama_guru.toLowerCase().includes(query) ||
-                                   mon.instansi.toLowerCase().includes(query) ||
-                                   mon.siswa.toLowerCase().includes(query);
-              const matchesGuru = !teachAttGuruFilter || mon.nama_guru === teachAttGuruFilter;
-              const matchesType = !teachAttTypeFilter || mon.tipe === teachAttTypeFilter;
+              const query = (reportsSearch || '').toLowerCase().trim();
+              const matchesQuery = !query ||
+                                   (mon.nama_guru || '').toLowerCase().includes(query) ||
+                                   (mon.instansi || '').toLowerCase().includes(query) ||
+                                   (mon.siswa || '').toLowerCase().includes(query) ||
+                                   (mon.catatan || '').toLowerCase().includes(query) ||
+                                   (mon.nip || '').toLowerCase().includes(query);
+              const matchesGuru = !teachAttGuruFilter ||
+                                  (mon.nama_guru || '').toLowerCase().includes(teachAttGuruFilter.toLowerCase()) ||
+                                  teachAttGuruFilter.toLowerCase().includes((mon.nama_guru || '').toLowerCase());
+              const matchesType = !teachAttTypeFilter ||
+                                  (mon.tipe || '').toLowerCase() === teachAttTypeFilter.toLowerCase() ||
+                                  (mon.tipe || '').toLowerCase().includes(teachAttTypeFilter.toLowerCase());
               
               let matchesMonth = true;
               if (teachAttMonthFilter) {
-                const month = mon.tanggal.split('-')[1];
-                matchesMonth = month === teachAttMonthFilter;
+                const strDate = String(mon.tanggal || '');
+                if (strDate.includes('-')) {
+                  const parts = strDate.split('-');
+                  if (parts.length >= 2) {
+                    const month = parts[1].padStart(2, '0');
+                    matchesMonth = (month === teachAttMonthFilter.padStart(2, '0'));
+                  }
+                } else if (strDate.includes('/')) {
+                  const parts = strDate.split('/');
+                  if (parts.length >= 2) {
+                    const month = parts[1].padStart(2, '0');
+                    matchesMonth = (month === teachAttMonthFilter.padStart(2, '0'));
+                  }
+                }
               }
               
               return matchesQuery && matchesGuru && matchesType && matchesMonth;
@@ -4017,7 +4061,10 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
               currentReportsPage * itemsPerPage
             );
 
-            const uniqueTeachersList = Array.from(new Set(users.filter(u => u.role === 'guru').map(t => t.nama)));
+            const uniqueTeachersList = Array.from(new Set([
+              ...users.filter(u => u.role === 'guru').map(t => t.nama),
+              ...teacherMonitoringReports.map(m => m.nama_guru).filter(Boolean)
+            ]));
 
             return (
               <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-4" id="admin-reports">
