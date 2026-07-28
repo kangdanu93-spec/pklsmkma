@@ -10,7 +10,7 @@ import { PklUser, PklInstansi, PklJournal, PklAttendance, PklPlacement, PklEvalu
 // DB Operations
 import { 
   dbGetUsers, dbGetInstansi, dbGetPlacements, dbGetJournals, 
-  dbGetAttendance, dbGetEvaluations, dbGetAnnouncements, dbGetMenuAccess, isSuperAdmin
+  dbGetAttendance, dbGetEvaluations, dbGetAnnouncements, dbGetMenuAccess, isSuperAdmin, localDb
 } from './utils/localDb';
 import { isSupabaseConnected, getSupabaseConfig, getSupabaseClient, syncSupabaseConfigFromServer } from './supabaseClient';
 
@@ -165,9 +165,18 @@ export default function App() {
 
   async function loadGlobalData(silent = false) {
     if (!silent) setGlobalLoading(true);
+
+    // Safety fallback timer: guarantee setGlobalLoading(false) executes within 3 seconds
+    const safetyTimer = setTimeout(() => {
+      if (!silent) setGlobalLoading(false);
+    }, 3000);
+
     try {
-      // Sync Supabase credentials from full-stack server
-      await syncSupabaseConfigFromServer();
+      // Sync Supabase credentials from full-stack server (with max 1.5s timeout)
+      await Promise.race([
+        syncSupabaseConfigFromServer(),
+        new Promise(res => setTimeout(res, 1500))
+      ]);
 
       // Load menu permissions
       const menuPerms = dbGetMenuAccess();
@@ -183,16 +192,8 @@ export default function App() {
         setSbDetails(null);
       }
 
-      // 2. Fetch all collections concurrently in parallel for max performance
-      const [
-        resUsers,
-        resInst,
-        resPlace,
-        resJour,
-        resAtt,
-        resEvals,
-        resAnns
-      ] = await Promise.all([
+      // 2. Fetch all collections concurrently with 2.5s maximum timeout
+      const fetchPromise = Promise.all([
         dbGetUsers().catch(() => ({ data: [], fromSupabase: false })),
         dbGetInstansi().catch(() => ({ data: [], fromSupabase: false })),
         dbGetPlacements().catch(() => ({ data: [], fromSupabase: false })),
@@ -201,6 +202,24 @@ export default function App() {
         dbGetEvaluations().catch(() => ({ data: [], fromSupabase: false })),
         dbGetAnnouncements().catch(() => ({ data: [], fromSupabase: false }))
       ]);
+
+      const fetchTimeoutPromise = new Promise<null>((resolve) =>
+        setTimeout(() => resolve(null), 2500)
+      );
+
+      const fetchResult = await Promise.race([fetchPromise, fetchTimeoutPromise]);
+
+      let resUsers = { data: localDb.get<PklUser>('SIM_PKL_USERS'), fromSupabase: false };
+      let resInst = { data: localDb.get<PklInstansi>('SIM_PKL_INSTANSI'), fromSupabase: false };
+      let resPlace = { data: localDb.get<PklPlacement>('SIM_PKL_PLACEMENTS'), fromSupabase: false };
+      let resJour = { data: localDb.get<PklJournal>('SIM_PKL_JOURNALS'), fromSupabase: false };
+      let resAtt = { data: localDb.get<PklAttendance>('SIM_PKL_ATTENDANCE'), fromSupabase: false };
+      let resEvals = { data: localDb.get<PklEvaluation>('SIM_PKL_EVALUATIONS'), fromSupabase: false };
+      let resAnns = { data: localDb.get<Announcement>('SIM_PKL_ANNOUNCEMENTS'), fromSupabase: false };
+
+      if (Array.isArray(fetchResult)) {
+        [resUsers, resInst, resPlace, resJour, resAtt, resEvals, resAnns] = fetchResult;
+      }
 
       setUsers(resUsers.data || []);
       setInstansiList(resInst.data || []);
@@ -267,6 +286,7 @@ export default function App() {
     } catch (error) {
       console.error('Gagal memuat data SIM PKL:', error);
     } finally {
+      clearTimeout(safetyTimer);
       if (!silent) setGlobalLoading(false);
     }
   };

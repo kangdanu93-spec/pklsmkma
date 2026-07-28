@@ -56,8 +56,13 @@ export async function syncSupabaseConfigFromServer(): Promise<boolean> {
     const localUrl = localStorage.getItem('SIM_PKL_SUPABASE_URL');
     const localKey = localStorage.getItem('SIM_PKL_SUPABASE_ANON_KEY');
 
-    const res = await fetch('/api/supabase-config');
-    if (res.ok) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+    const res = await fetch('/api/supabase-config', { signal: controller.signal }).catch(() => null);
+    clearTimeout(timeoutId);
+
+    if (res && res.ok) {
       const data = await res.json();
       if (data.url && data.anonKey) {
         if (localUrl !== data.url || localKey !== data.anonKey) {
@@ -68,13 +73,13 @@ export async function syncSupabaseConfigFromServer(): Promise<boolean> {
         }
       } else if (localUrl && localKey) {
         // Server config is empty, but local config is populated.
-        // Self-heal: Upload local config to server so other sessions can sync it.
+        // Self-heal: Upload local config to server asynchronously without blocking.
         console.log('Server config is empty. Uploading local Supabase config to server...');
-        await fetch('/api/save-supabase-config', {
+        fetch('/api/save-supabase-config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: localUrl.trim(), anonKey: localKey.trim() })
-        });
+        }).catch(() => {});
       }
     }
   } catch (err) {

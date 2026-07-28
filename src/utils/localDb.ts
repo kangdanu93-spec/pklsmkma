@@ -459,7 +459,7 @@ export function generateUUID(): string {
 initializeLocalStorage();
 
 // Generic handler for local db operations
-const localDb = {
+export const localDb = {
   get: <T>(key: string): T[] => {
     initializeLocalStorage();
     try {
