@@ -436,95 +436,87 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
   };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new Image();
-        img.onload = () => {
+    const inputEl = e.target;
+    const file = inputEl.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const rawResult = event.target?.result as string;
+      if (!rawResult) return;
+
+      const img = new Image();
+      img.onload = () => {
+        try {
           const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-          let maxDim = 800;
-
-          if (width > maxDim || height > maxDim) {
-            if (width > height) {
-              height = Math.round((height * maxDim) / width);
-              width = maxDim;
-            } else {
-              width = Math.round((width * maxDim) / height);
-              height = maxDim;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
           const ctx = canvas.getContext('2d');
+
           let dataUrl = '';
+          let sizeInKB = 9999;
+
+          // Multi-pass compression to automatically reduce image size under 240 KB
+          const configs = [
+            { maxDim: 800, quality: 0.75 },
+            { maxDim: 700, quality: 0.65 },
+            { maxDim: 600, quality: 0.55 },
+            { maxDim: 500, quality: 0.5 },
+            { maxDim: 400, quality: 0.4 },
+            { maxDim: 300, quality: 0.3 }
+          ];
 
           if (ctx) {
-            ctx.drawImage(img, 0, 0, width, height);
-            dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+            for (const cfg of configs) {
+              let width = img.width;
+              let height = img.height;
 
-            // Calculate size in KB
-            let base64Length = dataUrl.split(',')[1]?.length || 0;
-            let sizeInKB = Math.round((base64Length * 3 / 4) / 1024);
-
-            // If still > 250KB, attempt second pass compression with lower resolution & quality
-            if (sizeInKB > 250) {
-              maxDim = 600;
-              let w2 = img.width;
-              let h2 = img.height;
-              if (w2 > maxDim || h2 > maxDim) {
-                if (w2 > h2) {
-                  h2 = Math.round((h2 * maxDim) / w2);
-                  w2 = maxDim;
+              if (width > cfg.maxDim || height > cfg.maxDim) {
+                if (width > height) {
+                  height = Math.round((height * cfg.maxDim) / width);
+                  width = cfg.maxDim;
                 } else {
-                  w2 = Math.round((w2 * maxDim) / h2);
-                  h2 = maxDim;
+                  width = Math.round((width * cfg.maxDim) / height);
+                  height = cfg.maxDim;
                 }
               }
-              canvas.width = w2;
-              canvas.height = h2;
-              ctx.clearRect(0, 0, w2, h2);
-              ctx.drawImage(img, 0, 0, w2, h2);
-              dataUrl = canvas.toDataURL('image/jpeg', 0.5);
 
-              base64Length = dataUrl.split(',')[1]?.length || 0;
-              sizeInKB = Math.round((base64Length * 3 / 4) / 1024);
-            }
+              canvas.width = width;
+              canvas.height = height;
+              ctx.clearRect(0, 0, width, height);
+              ctx.drawImage(img, 0, 0, width, height);
 
-            // Check if final compressed size exceeds 250 KB
-            if (sizeInKB > 250) {
-              alert(`Ukuran foto terlalu besar (${sizeInKB} KB)! Maksimal ukuran foto adalah 250 KB. Silakan pilih foto dengan ukuran yang lebih kecil.`);
-              setMonPhoto('');
-              if (e.target) e.target.value = '';
-              return;
-            }
+              dataUrl = canvas.toDataURL('image/jpeg', cfg.quality);
+              const base64Str = dataUrl.split(',')[1] || '';
+              sizeInKB = Math.round((base64Str.length * 3 / 4) / 1024);
 
-            setMonPhoto(dataUrl);
-          } else {
-            const rawBase64 = event.target?.result as string || '';
-            const base64Length = rawBase64.split(',')[1]?.length || 0;
-            const sizeInKB = Math.round((base64Length * 3 / 4) / 1024);
-            if (sizeInKB > 250) {
-              alert(`Ukuran foto terlalu besar (${sizeInKB} KB)! Maksimal ukuran foto adalah 250 KB. Silakan pilih foto yang lebih kecil.`);
-              setMonPhoto('');
-              if (e.target) e.target.value = '';
-              return;
+              if (sizeInKB <= 240) {
+                break;
+              }
             }
-            setMonPhoto(rawBase64);
           }
-        };
-        img.onerror = () => {
-          alert('Gagal membaca file gambar. Silakan pilih file gambar yang lain.');
-          setMonPhoto('');
-          if (e.target) e.target.value = '';
-        };
-        img.src = event.target?.result as string;
+
+          if (!dataUrl) {
+            dataUrl = rawResult;
+          }
+
+          setMonPhoto(dataUrl);
+        } catch (err) {
+          console.error('Compression error:', err);
+          setMonPhoto(rawResult);
+        }
       };
-      reader.readAsDataURL(file);
-    }
+
+      img.onerror = () => {
+        setMonPhoto(rawResult);
+      };
+
+      img.src = rawResult;
+    };
+
+    reader.onerror = () => {
+      alert('Gagal membaca file gambar.');
+    };
+
+    reader.readAsDataURL(file);
   };
 
   // Filter student data for view with extra defensive checks
@@ -1207,19 +1199,26 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
                       </button>
                     </div>
                   ) : (
-                    <label className="border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-xl p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all bg-slate-50/50 hover:bg-indigo-50/10">
-                      <Camera className="w-8 h-8 text-slate-400" />
-                      <div className="text-center">
-                        <span className="text-xs font-bold text-indigo-600 hover:underline">Klik untuk upload foto</span>
-                        <p className="text-[10px] text-slate-400 mt-0.5">Mendukung kamera langsung atau unggahan file gambar (Maksimal 250 KB)</p>
-                      </div>
+                    <div>
+                      <label
+                        htmlFor="mon-photo-input"
+                        className="border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-xl p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all bg-slate-50/50 hover:bg-indigo-50/10 block text-center"
+                      >
+                        <Camera className="w-8 h-8 text-slate-400 mx-auto" />
+                        <div className="text-center">
+                          <span className="text-xs font-bold text-indigo-600 hover:underline">Klik untuk upload foto</span>
+                          <p className="text-[10px] text-slate-400 mt-0.5">Mendukung kamera langsung atau unggahan file gambar (Otomatis dikompresi &lt; 250 KB)</p>
+                        </div>
+                      </label>
                       <input
+                        id="mon-photo-input"
                         type="file"
                         accept="image/*"
                         onChange={handlePhotoUpload}
+                        onClick={(e) => { (e.target as HTMLInputElement).value = ''; }}
                         className="hidden"
                       />
-                    </label>
+                    </div>
                   )}
                 </div>
 
