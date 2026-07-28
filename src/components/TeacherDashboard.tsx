@@ -445,7 +445,7 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
           const canvas = document.createElement('canvas');
           let width = img.width;
           let height = img.height;
-          const maxDim = 1000;
+          let maxDim = 800;
 
           if (width > maxDim || height > maxDim) {
             if (width > height) {
@@ -460,14 +460,67 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext('2d');
+          let dataUrl = '';
+
           if (ctx) {
             ctx.drawImage(img, 0, 0, width, height);
-            setMonPhoto(canvas.toDataURL('image/jpeg', 0.75));
+            dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+
+            // Calculate size in KB
+            let base64Length = dataUrl.split(',')[1]?.length || 0;
+            let sizeInKB = Math.round((base64Length * 3 / 4) / 1024);
+
+            // If still > 250KB, attempt second pass compression with lower resolution & quality
+            if (sizeInKB > 250) {
+              maxDim = 600;
+              let w2 = img.width;
+              let h2 = img.height;
+              if (w2 > maxDim || h2 > maxDim) {
+                if (w2 > h2) {
+                  h2 = Math.round((h2 * maxDim) / w2);
+                  w2 = maxDim;
+                } else {
+                  w2 = Math.round((w2 * maxDim) / h2);
+                  h2 = maxDim;
+                }
+              }
+              canvas.width = w2;
+              canvas.height = h2;
+              ctx.clearRect(0, 0, w2, h2);
+              ctx.drawImage(img, 0, 0, w2, h2);
+              dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+
+              base64Length = dataUrl.split(',')[1]?.length || 0;
+              sizeInKB = Math.round((base64Length * 3 / 4) / 1024);
+            }
+
+            // Check if final compressed size exceeds 250 KB
+            if (sizeInKB > 250) {
+              alert(`Ukuran foto terlalu besar (${sizeInKB} KB)! Maksimal ukuran foto adalah 250 KB. Silakan pilih foto dengan ukuran yang lebih kecil.`);
+              setMonPhoto('');
+              if (e.target) e.target.value = '';
+              return;
+            }
+
+            setMonPhoto(dataUrl);
           } else {
-            setMonPhoto(event.target?.result as string || '');
+            const rawBase64 = event.target?.result as string || '';
+            const base64Length = rawBase64.split(',')[1]?.length || 0;
+            const sizeInKB = Math.round((base64Length * 3 / 4) / 1024);
+            if (sizeInKB > 250) {
+              alert(`Ukuran foto terlalu besar (${sizeInKB} KB)! Maksimal ukuran foto adalah 250 KB. Silakan pilih foto yang lebih kecil.`);
+              setMonPhoto('');
+              if (e.target) e.target.value = '';
+              return;
+            }
+            setMonPhoto(rawBase64);
           }
         };
-        img.onerror = () => setMonPhoto(event.target?.result as string || '');
+        img.onerror = () => {
+          alert('Gagal membaca file gambar. Silakan pilih file gambar yang lain.');
+          setMonPhoto('');
+          if (e.target) e.target.value = '';
+        };
         img.src = event.target?.result as string;
       };
       reader.readAsDataURL(file);
@@ -1158,7 +1211,7 @@ export default function TeacherDashboard({ teacher, instansiList, refreshCounter
                       <Camera className="w-8 h-8 text-slate-400" />
                       <div className="text-center">
                         <span className="text-xs font-bold text-indigo-600 hover:underline">Klik untuk upload foto</span>
-                        <p className="text-[10px] text-slate-400 mt-0.5">Mendukung kamera langsung atau unggahan file gambar (Maks. 5MB)</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Mendukung kamera langsung atau unggahan file gambar (Maksimal 250 KB)</p>
                       </div>
                       <input
                         type="file"
