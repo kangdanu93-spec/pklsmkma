@@ -300,17 +300,16 @@ function initializeLocalStorage() {
     localStorage.setItem('SIM_PKL_EVALUATIONS', JSON.stringify(INITIAL_EVALUATIONS));
     localStorage.setItem('SIM_PKL_ANNOUNCEMENTS', JSON.stringify(INITIAL_ANNOUNCEMENTS));
     localStorage.setItem('SIM_PKL_CLASSES', JSON.stringify(INITIAL_CLASSES));
-    localStorage.setItem('SIM_PKL_TEACHER_MONITORING', JSON.stringify(INITIAL_TEACHER_MONITORING));
+    localStorage.setItem('SIM_PKL_TEACHER_MONITORING', JSON.stringify([]));
     localStorage.setItem('SIM_PKL_INITIALIZED', 'true');
   } else {
     // Ensure classes key exists even if app was initialized previously
     if (!localStorage.getItem('SIM_PKL_CLASSES')) {
       localStorage.setItem('SIM_PKL_CLASSES', JSON.stringify(INITIAL_CLASSES));
     }
-    // Ensure teacher monitoring key exists and is non-empty
-    const existingMon = localStorage.getItem('SIM_PKL_TEACHER_MONITORING');
-    if (!existingMon || existingMon === '[]') {
-      localStorage.setItem('SIM_PKL_TEACHER_MONITORING', JSON.stringify(INITIAL_TEACHER_MONITORING));
+    // Ensure teacher monitoring key exists
+    if (!localStorage.getItem('SIM_PKL_TEACHER_MONITORING')) {
+      localStorage.setItem('SIM_PKL_TEACHER_MONITORING', JSON.stringify([]));
     }
     // Force migrate local storage to make sure standard admin and other mock users exist
     try {
@@ -614,29 +613,6 @@ export async function autoSeedSupabase(sb: any) {
           id: cls.id.includes('class-') ? undefined : cls.id,
           nama_kelas: cls.nama_kelas,
           jurusan: cls.jurusan
-        });
-      }
-    }
-
-    // 9. Teacher Monitoring
-    const { data: monCheck, error: monErr } = await sb.from('pkl_teacher_monitoring').select('id');
-    if (!monErr && (!monCheck || monCheck.length === 0)) {
-      console.log('Seeding pkl_teacher_monitoring to Supabase...');
-      for (const mon of INITIAL_TEACHER_MONITORING) {
-        await sb.from('pkl_teacher_monitoring').upsert({
-          id: mon.id.includes('mon-') ? undefined : mon.id,
-          id_guru: mon.id_guru,
-          nama_guru: mon.nama_guru,
-          tanggal: mon.tanggal,
-          jam_monitoring: mon.jam_monitoring,
-          tipe_monitoring: mon.tipe_monitoring,
-          latitude: mon.latitude,
-          longitude: mon.longitude,
-          foto_url: mon.foto_url,
-          catatan: mon.catatan,
-          id_siswa: mon.id_siswa,
-          nama_siswa: mon.nama_siswa,
-          nama_instansi: mon.nama_instansi
         });
       }
     }
@@ -1608,10 +1584,10 @@ export async function syncLocalDataToSupabase(): Promise<{ success: boolean, mes
     }
 
     try {
-      const monitorings = localDb.get<TeacherMonitoring>('SIM_PKL_TEACHER_MONITORING');
+      const monitorings = localDb.get<TeacherMonitoring>('SIM_PKL_TEACHER_MONITORING').filter(m => m && !m.id.startsWith('mon-'));
       for (const mon of monitorings) {
         await sb.from('pkl_teacher_monitoring').upsert({
-          id: mon.id.includes('mon-') ? undefined : mon.id,
+          id: mon.id,
           id_guru: mon.id_guru,
           nama_guru: mon.nama_guru,
           tanggal: mon.tanggal,
@@ -1762,62 +1738,45 @@ export async function dbDeleteClass(id: string): Promise<{ success: boolean, fro
 export async function dbGetTeacherMonitorings(): Promise<{ data: TeacherMonitoring[], fromSupabase: boolean }> {
   const sb = getSupabaseClient();
   if (sb) {
-    try {
-      const { data, error } = await sb.from('pkl_teacher_monitoring').select('*').order('tanggal', { ascending: false });
-      if (!error && data) {
-        if (data.length === 0) {
-          // If Supabase table is empty, check local data or seed initial data
-          const localData = localDb.get<TeacherMonitoring>('SIM_PKL_TEACHER_MONITORING');
-          const dataToSeed = (localData && localData.length > 0) ? localData : INITIAL_TEACHER_MONITORING;
-          if (dataToSeed.length > 0) {
-            for (const item of dataToSeed) {
-              await sb.from('pkl_teacher_monitoring').upsert({
-                id: item.id.includes('mon-') ? undefined : item.id,
-                id_guru: item.id_guru,
-                nama_guru: item.nama_guru,
-                tanggal: item.tanggal,
-                jam_monitoring: item.jam_monitoring,
-                tipe_monitoring: item.tipe_monitoring,
-                latitude: item.latitude,
-                longitude: item.longitude,
-                foto_url: item.foto_url,
-                catatan: item.catatan,
-                id_siswa: item.id_siswa,
-                nama_siswa: item.nama_siswa,
-                nama_instansi: item.nama_instansi
-              });
-            }
-            return { data: dataToSeed, fromSupabase: true };
-          }
+    const candidateTables = [
+      'pkl_teacher_monitoring',
+      'pkl_teacher_monitorings',
+      'pkl_monitoring_guru',
+      'pkl_monitoring',
+      'pkl_kunjungan_guru',
+      'pkl_kunjungan'
+    ];
+
+    for (const tableName of candidateTables) {
+      try {
+        const { data, error } = await sb.from(tableName).select('*');
+        if (!error && Array.isArray(data)) {
+          const normalized = data.map((item: any) => ({
+            id: String(item.id || item.monitoring_id || generateUUID()),
+            id_guru: item.id_guru || item.guru_id || item.email_guru || item.guru_email || item.user_id || '',
+            nama_guru: item.nama_guru || item.guru_nama || item.guru || item.nama || '',
+            tanggal: item.tanggal || item.tgl || item.date || (item.created_at ? String(item.created_at).split('T')[0] : ''),
+            jam_monitoring: item.jam_monitoring || item.jam || item.waktu || item.time || '',
+            tipe_monitoring: item.tipe_monitoring || item.tipe || item.type || item.tipeMonitoring || 'Monitoring 1',
+            latitude: item.latitude != null ? Number(item.latitude) : (item.lat != null ? Number(item.lat) : undefined),
+            longitude: item.longitude != null ? Number(item.longitude) : (item.lng != null ? Number(item.lng) : (item.long != null ? Number(item.long) : undefined)),
+            foto_url: item.foto_url || item.foto || item.bukti || item.image_url || item.url_foto || undefined,
+            catatan: item.catatan || item.keterangan || item.catatan_kunjungan || item.notes || item.deskripsi || undefined,
+            id_siswa: item.id_siswa || item.siswa_id || item.id_instansi || item.instansi_id || undefined,
+            nama_siswa: item.nama_siswa || item.siswa || item.nama_siswa_monitored || undefined,
+            nama_instansi: item.nama_instansi || item.instansi || item.perusahaan || item.nama_perusahaan || undefined,
+            created_at: item.created_at
+          }));
+          return { data: normalized as TeacherMonitoring[], fromSupabase: true };
         }
-        // Normalize fields from Supabase to guarantee consistent interface
-        const normalized = data.map((item: any) => ({
-          id: item.id || generateUUID(),
-          id_guru: item.id_guru || item.guru_id || '',
-          nama_guru: item.nama_guru || item.guru_nama || item.guru || '',
-          tanggal: item.tanggal || '',
-          jam_monitoring: item.jam_monitoring || item.jam || '',
-          tipe_monitoring: item.tipe_monitoring || item.tipe || item.type || 'Monitoring 1',
-          latitude: item.latitude ? Number(item.latitude) : undefined,
-          longitude: item.longitude ? Number(item.longitude) : undefined,
-          foto_url: item.foto_url || item.foto || item.bukti || undefined,
-          catatan: item.catatan || item.keterangan || undefined,
-          id_siswa: item.id_siswa || item.siswa_id || item.id_instansi || undefined,
-          nama_siswa: item.nama_siswa || item.siswa || undefined,
-          nama_instansi: item.nama_instansi || item.instansi || item.perusahaan || undefined,
-          created_at: item.created_at
-        }));
-        return { data: normalized as TeacherMonitoring[], fromSupabase: true };
+      } catch (e) {
+        // try next table candidate
       }
-    } catch (e) {}
+    }
   }
 
-  let localData = localDb.get<TeacherMonitoring>('SIM_PKL_TEACHER_MONITORING');
-  if (!localData || localData.length === 0) {
-    localData = INITIAL_TEACHER_MONITORING;
-    localDb.set('SIM_PKL_TEACHER_MONITORING', INITIAL_TEACHER_MONITORING);
-  }
-  return { data: localData, fromSupabase: false };
+  const localData = localDb.get<TeacherMonitoring>('SIM_PKL_TEACHER_MONITORING');
+  return { data: Array.isArray(localData) ? localData : [], fromSupabase: false };
 }
 
 export async function dbSaveTeacherMonitoring(monitoring: TeacherMonitoring): Promise<{ success: boolean, data?: TeacherMonitoring, fromSupabase: boolean, error?: string }> {
@@ -1837,27 +1796,31 @@ export async function dbSaveTeacherMonitoring(monitoring: TeacherMonitoring): Pr
   let errorMsg = '';
 
   if (sb) {
-    try {
-      const { data, error } = await sb.from('pkl_teacher_monitoring').upsert(monitoring).select();
-      if (!error && data && data.length > 0) {
-        success = true;
-        fromSupabase = true;
-        returnedData = data[0] as TeacherMonitoring;
-      } else if (error) {
-        if (error.code === 'P0001' || error.code === '42P01' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
-          console.warn('Supabase table pkl_teacher_monitoring not found, proceeding locally');
-        } else {
-          console.error('Supabase save teacher monitoring failed:', error);
-          errorMsg = error.message;
+    const candidateTables = [
+      'pkl_teacher_monitoring',
+      'pkl_teacher_monitorings',
+      'pkl_monitoring_guru',
+      'pkl_monitoring',
+      'pkl_kunjungan_guru',
+      'pkl_kunjungan'
+    ];
+
+    for (const tableName of candidateTables) {
+      try {
+        const { data, error } = await sb.from(tableName).upsert(monitoring).select();
+        if (!error && data && data.length > 0) {
+          success = true;
           fromSupabase = true;
+          returnedData = data[0] as TeacherMonitoring;
+          break;
+        } else if (!error) {
+          success = true;
+          fromSupabase = true;
+          break;
         }
-      } else {
-        success = true;
-        fromSupabase = true;
+      } catch (e: any) {
+        errorMsg = e?.message || String(e);
       }
-    } catch (e: any) {
-      console.error('Supabase save teacher monitoring error:', e);
-      errorMsg = e?.message || String(e);
     }
   }
 
