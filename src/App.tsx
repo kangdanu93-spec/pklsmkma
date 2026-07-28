@@ -36,11 +36,71 @@ export default function App() {
   // Loading & UI control
   const [globalLoading, setGlobalLoading] = useState(true);
   const [activeMenu, setActiveMenu] = useState<'dashboard' | 'stats'>('dashboard');
-  const [currentUser, setCurrentUser] = useState<PklUser | null>(null);
+  const [currentUser, setCurrentUser] = useState<PklUser | null>(() => {
+    try {
+      const savedSession = localStorage.getItem('SIM_PKL_ACTIVE_SESSION');
+      const lastActivity = Number(localStorage.getItem('SIM_PKL_LAST_ACTIVITY') || '0');
+      const INACTIVITY_LIMIT = 15 * 60 * 1000; // 15 mins
+      if (savedSession && lastActivity > 0 && (Date.now() - lastActivity < INACTIVITY_LIMIT)) {
+        return JSON.parse(savedSession);
+      }
+    } catch {
+      // Ignore parse error
+    }
+    return null;
+  });
+  const [sessionExpiredNotice, setSessionExpiredNotice] = useState(false);
   const [isDbConnected, setIsDbConnected] = useState(false);
   const [sbDetails, setSbDetails] = useState<{ url: string } | null>(null);
   const [isUsingLocalStorageFallback, setIsUsingLocalStorageFallback] = useState(false);
   const [refreshCounter, setRefreshCounter] = useState(0);
+
+  // Inactivity auto-logout tracking (15 minutes threshold)
+  const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000;
+
+  // Track user activity (mousemove, keydown, click, scroll, touch) throttled to 5s
+  useEffect(() => {
+    let lastUpdate = 0;
+    const updateActivity = () => {
+      const now = Date.now();
+      if (now - lastUpdate > 5000) {
+        lastUpdate = now;
+        localStorage.setItem('SIM_PKL_LAST_ACTIVITY', now.toString());
+      }
+    };
+
+    // Initialize activity timestamp if missing
+    if (!localStorage.getItem('SIM_PKL_LAST_ACTIVITY')) {
+      localStorage.setItem('SIM_PKL_LAST_ACTIVITY', Date.now().toString());
+    }
+
+    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'];
+    events.forEach(evt => window.addEventListener(evt, updateActivity, { passive: true }));
+
+    return () => {
+      events.forEach(evt => window.removeEventListener(evt, updateActivity));
+    };
+  }, []);
+
+  // Interval check for inactivity timeout (runs every 5 seconds)
+  useEffect(() => {
+    const checkInactivity = () => {
+      if (!currentUser) return;
+
+      const lastActivityStr = localStorage.getItem('SIM_PKL_LAST_ACTIVITY');
+      const lastActivity = lastActivityStr ? Number(lastActivityStr) : Date.now();
+      const inactiveDuration = Date.now() - lastActivity;
+
+      if (inactiveDuration >= INACTIVITY_TIMEOUT_MS) {
+        console.warn('Auto logout triggered due to 15 minutes of inactivity.');
+        handleLogout();
+        setSessionExpiredNotice(true);
+      }
+    };
+
+    const interval = setInterval(checkInactivity, 5000);
+    return () => clearInterval(interval);
+  }, [currentUser]);
 
   // Load everything on start
   useEffect(() => {
@@ -85,7 +145,7 @@ export default function App() {
     };
   }, [isDbConnected]);
 
-  // Robust fallback polling interval (runs every 5 seconds) for instant cross-browser/session synchronization
+  // Robust fallback polling interval (runs every 20 seconds) for cross-browser synchronization
   const loadGlobalDataRef = useRef<((silent?: boolean) => Promise<void>) | null>(null);
   useEffect(() => {
     loadGlobalDataRef.current = loadGlobalData;
@@ -93,14 +153,15 @@ export default function App() {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      // Only poll when window is visible to prevent lagging inactive tabs and network thrashing
-      if (document.visibilityState === 'visible' && loadGlobalDataRef.current) {
+      // Only poll when window is visible AND a user is actively logged in
+      // This prevents continuous heavy DB queries on the login screen
+      if (document.visibilityState === 'visible' && currentUser && loadGlobalDataRef.current) {
         loadGlobalDataRef.current(true);
       }
-    }, 15000);
+    }, 20000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [currentUser]);
 
   async function loadGlobalData(silent = false) {
     if (!silent) setGlobalLoading(true);
@@ -154,6 +215,7 @@ export default function App() {
         const freshUser = resUsers.data.find(u => u.id === currentUser.id);
         if (freshUser && JSON.stringify(freshUser) !== JSON.stringify(currentUser)) {
           setCurrentUser(freshUser);
+          localStorage.setItem('SIM_PKL_ACTIVE_SESSION', JSON.stringify(freshUser));
         }
       }
 
@@ -182,6 +244,7 @@ export default function App() {
             if (found) {
               setCurrentUser(found);
               localStorage.setItem('SIM_PKL_LOGGED_IN_USER_ID', found.id);
+              localStorage.setItem('SIM_PKL_ACTIVE_SESSION', JSON.stringify(found));
               sessionUserFound = true;
             }
           }
@@ -194,6 +257,7 @@ export default function App() {
           const found = resUsers.data.find(u => u.id === savedUserId);
           if (found) {
             setCurrentUser(found);
+            localStorage.setItem('SIM_PKL_ACTIVE_SESSION', JSON.stringify(found));
           }
         }
       }
@@ -212,19 +276,24 @@ export default function App() {
     if (selected) {
       setCurrentUser(selected);
       localStorage.setItem('SIM_PKL_LOGGED_IN_USER_ID', selected.id);
+      localStorage.setItem('SIM_PKL_ACTIVE_SESSION', JSON.stringify(selected));
+      localStorage.setItem('SIM_PKL_LAST_ACTIVITY', Date.now().toString());
+      setSessionExpiredNotice(false);
     } else {
       setCurrentUser(null);
       localStorage.removeItem('SIM_PKL_LOGGED_IN_USER_ID');
+      localStorage.removeItem('SIM_PKL_ACTIVE_SESSION');
     }
   };
 
   const handleLogout = async () => {
     const sb = getSupabaseClient();
     if (sb) {
-      await sb.auth.signOut();
+      await sb.auth.signOut().catch(() => {});
     }
     setCurrentUser(null);
     localStorage.removeItem('SIM_PKL_LOGGED_IN_USER_ID');
+    localStorage.removeItem('SIM_PKL_ACTIVE_SESSION');
     setActiveMenu('dashboard');
   };
 
@@ -298,7 +367,7 @@ export default function App() {
                   <LayoutDashboard className="w-4 h-4" /> Dashboard PKL
                 </button>
               )}
-              {currentUser && currentUser.role !== 'siswa' && isMenuAllowed('statistik_hasil') && (
+              {currentUser && currentUser.role !== 'siswa' && currentUser.role !== 'guru' && isMenuAllowed('statistik_hasil') && (
                 <button
                   onClick={() => setActiveMenu('stats')}
                   className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
@@ -314,6 +383,10 @@ export default function App() {
               <>
                 <div className="h-6 w-[1px] bg-slate-100 hidden md:block"></div>
                 <div className="flex items-center gap-3">
+                  <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full text-[10px] font-bold" title="Sesi terproteksi. Otomatis logout jika tidak ada aktivitas selama 15 menit">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>Sesi Aktif (Auto Logout 15m)</span>
+                  </div>
                   <div className="text-right leading-none">
                     <span className="text-xs font-bold text-slate-800 block">{currentUser.nama}</span>
                     <span className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider block mt-0.5">
@@ -344,8 +417,10 @@ export default function App() {
             isDbConnected={isDbConnected}
             isUsingLocalStorageFallback={isUsingLocalStorageFallback}
             sbDetails={sbDetails}
+            sessionExpiredNotice={sessionExpiredNotice}
+            onDismissSessionNotice={() => setSessionExpiredNotice(false)}
           />
-        ) : (activeMenu === 'stats' && currentUser?.role !== 'siswa') ? (
+        ) : (activeMenu === 'stats' && currentUser?.role !== 'siswa' && currentUser?.role !== 'guru') ? (
           <div className="space-y-6">
             <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
               <h2 className="text-base font-bold text-slate-800">Laporan Visual & Analitik SIM PKL</h2>

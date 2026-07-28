@@ -1849,9 +1849,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" /> Live Sync
                         </span>
                       </div>
-                      <p className="text-xs text-slate-300">
-                        Ringkasan real-time aktivitas absensi, jurnal harian, dan monitoring lapangan guru pembimbing PKL SMKN 1 Bandung.
-                      </p>
+
                     </div>
 
                     <div className="flex items-center gap-2 self-start md:self-center shrink-0">

@@ -10,6 +10,8 @@ interface LoginProps {
   isDbConnected?: boolean;
   isUsingLocalStorageFallback?: boolean;
   sbDetails?: { url: string } | null;
+  sessionExpiredNotice?: boolean;
+  onDismissSessionNotice?: () => void;
 }
 
 export const Login: React.FC<LoginProps> = ({ 
@@ -17,7 +19,9 @@ export const Login: React.FC<LoginProps> = ({
   onLoginSuccess,
   isDbConnected = false,
   isUsingLocalStorageFallback = false,
-  sbDetails = null
+  sbDetails = null,
+  sessionExpiredNotice = false,
+  onDismissSessionNotice
 }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -205,6 +209,29 @@ export const Login: React.FC<LoginProps> = ({
                 </button>
               )}
             </div>
+
+            {sessionExpiredNotice && (
+              <div className="p-3.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs font-semibold flex items-start justify-between gap-2 shadow-sm animate-pulse">
+                <div className="flex items-start gap-2">
+                  <ShieldAlert className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                  <div>
+                    <strong className="block text-amber-900 font-bold">Sesi Otomatis Berakhir (Auto Logout)</strong>
+                    <p className="text-[11px] text-amber-800 mt-0.5 font-normal">
+                      Anda telah keluar dari aplikasi secara otomatis karena tidak ada aktivitas selama 15 menit. Silakan masuk kembali.
+                    </p>
+                  </div>
+                </div>
+                {onDismissSessionNotice && (
+                  <button 
+                    type="button" 
+                    onClick={onDismissSessionNotice} 
+                    className="text-amber-600 hover:text-amber-900 text-xs font-bold cursor-pointer underline shrink-0"
+                  >
+                    Tutup
+                  </button>
+                )}
+              </div>
+            )}
 
             {error && (
               <div className="p-3.5 bg-rose-50 border border-rose-100 text-rose-700 rounded-xl text-xs font-semibold flex items-start gap-2 animate-shake">

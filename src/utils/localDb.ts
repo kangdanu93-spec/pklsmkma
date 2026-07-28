@@ -332,7 +332,7 @@ function initializeLocalStorage() {
 
 export const DEFAULT_MENU_ACCESS: MenuAccess[] = [
   { id: 'dashboard_pkl', nama_menu: 'Dashboard PKL', kategori: 'Utama', allowed_roles: ['siswa', 'guru', 'industri', 'admin'], deskripsi: 'Akses ke halaman Dashboard utama sesuai peran masing-masing.' },
-  { id: 'statistik_hasil', nama_menu: 'Statistik & Hasil', kategori: 'Utama', allowed_roles: ['siswa', 'guru', 'industri', 'admin'], deskripsi: 'Akses ke menu Grafik Visual, Analitik, dan pencapaian PKL.' },
+  { id: 'statistik_hasil', nama_menu: 'Statistik & Hasil', kategori: 'Utama', allowed_roles: ['industri', 'admin'], deskripsi: 'Akses ke menu Grafik Visual, Analitik, dan pencapaian PKL.' },
   
   { id: 'siswa_biodata', nama_menu: 'Biodata & Status PKL', kategori: 'Siswa', allowed_roles: ['siswa'], deskripsi: 'Melihat status penempatan, kelas, dan data pembimbing siswa.' },
   { id: 'siswa_pengajuan', nama_menu: 'Pengajuan Tempat PKL', kategori: 'Siswa', allowed_roles: ['siswa'], deskripsi: 'Mengajukan surat minat penempatan mandiri ke instansi mitra.' },
@@ -370,8 +370,12 @@ export function dbGetMenuAccess(): MenuAccess[] {
     const merged = [...saved];
     let changed = false;
     DEFAULT_MENU_ACCESS.forEach(defItem => {
-      if (!merged.some(item => item.id === defItem.id)) {
+      const existing = merged.find(item => item.id === defItem.id);
+      if (!existing) {
         merged.push(defItem);
+        changed = true;
+      } else if (defItem.id === 'statistik_hasil' && (existing.allowed_roles.includes('guru') || existing.allowed_roles.includes('siswa'))) {
+        existing.allowed_roles = existing.allowed_roles.filter(r => r !== 'guru' && r !== 'siswa');
         changed = true;
       }
     });
