@@ -1882,46 +1882,78 @@ export async function dbSaveTeacherMonitoring(monitoring: TeacherMonitoring): Pr
       'pkl_kunjungan'
     ];
 
-    for (const tableName of candidateTables) {
-      try {
-        // Server-side duplicate check before inserting new row
-        const { data: existingRows } = await sb
-          .from(tableName)
-          .select('*')
-          .eq('tanggal', monitoring.tanggal)
-          .eq('tipe_monitoring', monitoring.tipe_monitoring);
+    const trySupabaseSave = async () => {
+      for (const tableName of candidateTables) {
+        try {
+          // Server-side duplicate check before inserting new row
+          const selectPromise = sb
+            .from(tableName)
+            .select('*')
+            .eq('tanggal', monitoring.tanggal)
+            .eq('tipe_monitoring', monitoring.tipe_monitoring);
 
-        if (Array.isArray(existingRows) && existingRows.length > 0) {
-          const isDup = existingRows.some((r: any) => {
-            const sameGuru = (r.id_guru === monitoring.id_guru || r.nama_guru === monitoring.nama_guru);
-            const sameInstansi = (r.id_siswa === monitoring.id_siswa || 
-                                 (r.nama_instansi && monitoring.nama_instansi && String(r.nama_instansi).toLowerCase().trim() === String(monitoring.nama_instansi).toLowerCase().trim()));
-            return sameGuru && sameInstansi;
-          });
+          const { data: existingRows } = await Promise.race([
+            selectPromise,
+            new Promise<any>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
+          ]).catch(() => ({ data: null }));
 
-          if (isDup) {
-            return {
-              success: false,
-              fromSupabase: true,
-              error: `Laporan ${monitoring.tipe_monitoring} untuk ${monitoring.nama_instansi || 'instansi ini'} pada tanggal ${monitoring.tanggal} sudah pernah tersimpan.`
-            };
+          if (Array.isArray(existingRows) && existingRows.length > 0) {
+            const isDup = existingRows.some((r: any) => {
+              const sameGuru = (r.id_guru === monitoring.id_guru || r.nama_guru === monitoring.nama_guru);
+              const sameInstansi = (r.id_siswa === monitoring.id_siswa || 
+                                   (r.nama_instansi && monitoring.nama_instansi && String(r.nama_instansi).toLowerCase().trim() === String(monitoring.nama_instansi).toLowerCase().trim()));
+              return sameGuru && sameInstansi;
+            });
+
+            if (isDup) {
+              return {
+                isDuplicateError: true,
+                error: `Laporan ${monitoring.tipe_monitoring} untuk ${monitoring.nama_instansi || 'instansi ini'} pada tanggal ${monitoring.tanggal} sudah pernah tersimpan.`
+              };
+            }
           }
-        }
 
-        const { data, error } = await sb.from(tableName).upsert(monitoring).select();
-        if (!error && data && data.length > 0) {
-          success = true;
-          fromSupabase = true;
-          returnedData = data[0] as TeacherMonitoring;
-          break;
-        } else if (!error) {
-          success = true;
-          fromSupabase = true;
-          break;
+          const upsertPromise = sb.from(tableName).upsert(monitoring).select();
+          const { data, error } = await Promise.race([
+            upsertPromise,
+            new Promise<any>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 4000))
+          ]);
+
+          if (!error && data && data.length > 0) {
+            return { success: true, returnedData: data[0] as TeacherMonitoring };
+          } else if (!error) {
+            return { success: true, returnedData: monitoring };
+          }
+        } catch (e: any) {
+          errorMsg = e?.message || String(e);
         }
-      } catch (e: any) {
-        errorMsg = e?.message || String(e);
       }
+      return null;
+    };
+
+    try {
+      const resSb = await Promise.race([
+        trySupabaseSave(),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000))
+      ]);
+
+      if (resSb?.isDuplicateError) {
+        return {
+          success: false,
+          fromSupabase: true,
+          error: resSb.error
+        };
+      }
+
+      if (resSb?.success) {
+        success = true;
+        fromSupabase = true;
+        if (resSb.returnedData) {
+          returnedData = resSb.returnedData;
+        }
+      }
+    } catch (sbErr: any) {
+      console.warn('Supabase save operation timed out or failed, falling back to local DB:', sbErr);
     }
   }
 
