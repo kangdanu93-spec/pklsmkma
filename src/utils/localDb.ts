@@ -1767,7 +1767,26 @@ export async function dbGetTeacherMonitorings(): Promise<{ data: TeacherMonitori
             nama_instansi: item.nama_instansi || item.instansi || item.perusahaan || item.nama_perusahaan || undefined,
             created_at: item.created_at
           }));
-          return { data: normalized as TeacherMonitoring[], fromSupabase: true };
+
+          // Sort by tanggal & jam_monitoring descending (latest first)
+          normalized.sort((a, b) => {
+            const timeA = `${a.tanggal || ''} ${a.jam_monitoring || ''}`;
+            const timeB = `${b.tanggal || ''} ${b.jam_monitoring || ''}`;
+            return timeB.localeCompare(timeA);
+          });
+
+          // Deduplicate exact duplicate records if any exist in DB
+          const seen = new Set<string>();
+          const uniqueData: TeacherMonitoring[] = [];
+          for (const item of normalized) {
+            const key = `${item.id_guru || item.nama_guru}_${item.nama_instansi || item.id_siswa}_${item.tanggal}_${item.tipe_monitoring}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              uniqueData.push(item as TeacherMonitoring);
+            }
+          }
+
+          return { data: uniqueData, fromSupabase: true };
         }
       } catch (e) {
         // try next table candidate
@@ -1776,7 +1795,20 @@ export async function dbGetTeacherMonitorings(): Promise<{ data: TeacherMonitori
   }
 
   const localData = localDb.get<TeacherMonitoring>('SIM_PKL_TEACHER_MONITORING');
-  return { data: Array.isArray(localData) ? localData : [], fromSupabase: false };
+  const arr = Array.isArray(localData) ? localData : [];
+  
+  // Deduplicate local data
+  const seenLocal = new Set<string>();
+  const uniqueLocal: TeacherMonitoring[] = [];
+  for (const item of arr) {
+    const key = `${item.id_guru || item.nama_guru}_${item.nama_instansi || item.id_siswa}_${item.tanggal}_${item.tipe_monitoring}`;
+    if (!seenLocal.has(key)) {
+      seenLocal.add(key);
+      uniqueLocal.push(item);
+    }
+  }
+
+  return { data: uniqueLocal, fromSupabase: false };
 }
 
 export async function dbSaveTeacherMonitoring(monitoring: TeacherMonitoring): Promise<{ success: boolean, data?: TeacherMonitoring, fromSupabase: boolean, error?: string }> {
@@ -1807,6 +1839,30 @@ export async function dbSaveTeacherMonitoring(monitoring: TeacherMonitoring): Pr
 
     for (const tableName of candidateTables) {
       try {
+        // Server-side duplicate check before inserting new row
+        const { data: existingRows } = await sb
+          .from(tableName)
+          .select('*')
+          .eq('tanggal', monitoring.tanggal)
+          .eq('tipe_monitoring', monitoring.tipe_monitoring);
+
+        if (Array.isArray(existingRows) && existingRows.length > 0) {
+          const isDup = existingRows.some((r: any) => {
+            const sameGuru = (r.id_guru === monitoring.id_guru || r.nama_guru === monitoring.nama_guru);
+            const sameInstansi = (r.id_siswa === monitoring.id_siswa || 
+                                 (r.nama_instansi && monitoring.nama_instansi && String(r.nama_instansi).toLowerCase().trim() === String(monitoring.nama_instansi).toLowerCase().trim()));
+            return sameGuru && sameInstansi;
+          });
+
+          if (isDup) {
+            return {
+              success: false,
+              fromSupabase: true,
+              error: `Laporan ${monitoring.tipe_monitoring} untuk ${monitoring.nama_instansi || 'instansi ini'} pada tanggal ${monitoring.tanggal} sudah pernah tersimpan.`
+            };
+          }
+        }
+
         const { data, error } = await sb.from(tableName).upsert(monitoring).select();
         if (!error && data && data.length > 0) {
           success = true;
@@ -1826,7 +1882,10 @@ export async function dbSaveTeacherMonitoring(monitoring: TeacherMonitoring): Pr
 
   // Update locally too
   const monitorings = localDb.get<TeacherMonitoring>('SIM_PKL_TEACHER_MONITORING');
-  const existingIdx = monitorings.findIndex(m => m.id === monitoring.id);
+  const existingIdx = monitorings.findIndex(m => 
+    m.id === monitoring.id || 
+    (m.id_guru === monitoring.id_guru && m.nama_instansi === monitoring.nama_instansi && m.tanggal === monitoring.tanggal && m.tipe_monitoring === monitoring.tipe_monitoring)
+  );
   
   if (existingIdx >= 0) {
     monitorings[existingIdx] = returnedData;
