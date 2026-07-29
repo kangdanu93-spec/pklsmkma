@@ -155,6 +155,8 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
   const [plottingSearch, setPlottingSearch] = useState('');
   const [plottingStatusFilter, setPlottingStatusFilter] = useState<'all' | 'belum_diplot' | 'sudah_diplot'>('all');
   const [plottingClassFilter, setPlottingClassFilter] = useState('');
+  const [plottingInstansiFilter, setPlottingInstansiFilter] = useState('');
+  const [plottingTeacherFilter, setPlottingTeacherFilter] = useState('');
   const [plottingPage, setPlottingPage] = useState(1);
 
   // Dynamic dropdown options calculated from master classes state, with static fallbacks
@@ -2669,13 +2671,13 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                       <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
                       <input
                         type="text"
-                        placeholder="Cari nama atau NISN..."
+                        placeholder="Cari nama, NISN, instansi, atau guru..."
                         value={plottingSearch}
                         onChange={(e) => {
                           setPlottingSearch(e.target.value);
                           setPlottingPage(1);
                         }}
-                        className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-800 w-48 shadow-xs"
+                        className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-800 w-52 sm:w-64 shadow-xs"
                       />
                     </div>
 
@@ -2694,6 +2696,36 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                       ))}
                     </select>
 
+                    {/* Instansi Dropdown */}
+                    <select
+                      value={plottingInstansiFilter}
+                      onChange={(e) => {
+                        setPlottingInstansiFilter(e.target.value);
+                        setPlottingPage(1);
+                      }}
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none bg-white text-slate-700 shadow-xs max-w-[170px] truncate"
+                    >
+                      <option value="">Semua Instansi</option>
+                      {instansiList.map((inst) => (
+                        <option key={inst.id} value={inst.id}>{inst.nama_instansi}</option>
+                      ))}
+                    </select>
+
+                    {/* Teacher Dropdown */}
+                    <select
+                      value={plottingTeacherFilter}
+                      onChange={(e) => {
+                        setPlottingTeacherFilter(e.target.value);
+                        setPlottingPage(1);
+                      }}
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none bg-white text-slate-700 shadow-xs max-w-[170px] truncate"
+                    >
+                      <option value="">Semua Guru Pembimbing</option>
+                      {teachers.map((t) => (
+                        <option key={t.id} value={t.id}>{t.nama}</option>
+                      ))}
+                    </select>
+
                     {/* Status Dropdown */}
                     <select
                       value={plottingStatusFilter}
@@ -2707,6 +2739,23 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                       <option value="belum_diplot">Belum diplot</option>
                       <option value="sudah_diplot">Sudah diplot</option>
                     </select>
+
+                    {/* Reset Button */}
+                    {(plottingSearch || plottingClassFilter || plottingInstansiFilter || plottingTeacherFilter || plottingStatusFilter !== 'all') && (
+                      <button
+                        onClick={() => {
+                          setPlottingSearch('');
+                          setPlottingClassFilter('');
+                          setPlottingInstansiFilter('');
+                          setPlottingTeacherFilter('');
+                          setPlottingStatusFilter('all');
+                          setPlottingPage(1);
+                        }}
+                        className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-bold border border-rose-200 transition-all cursor-pointer"
+                      >
+                        Reset
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -2714,10 +2763,20 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                   const plottingStudents = users.filter(u => u.role === 'siswa');
                   const filteredPlottingStudents = plottingStudents.filter((stud) => {
                     const searchLower = plottingSearch.toLowerCase();
+
+                    const studentPlacement = placements.find(p => p.id_siswa === stud.id);
+                    const company = instansiList.find(i => i.id === stud.id_instansi || i.id === studentPlacement?.id_instansi);
+                    const currentTeacher = teachers.find(t => t.id === stud.id_pembimbing);
+
+                    const instansiName = (company?.nama_instansi || '').toLowerCase();
+                    const teacherName = (currentTeacher?.nama || '').toLowerCase();
+
                     const matchesSearch = !plottingSearch || 
                       stud.nama.toLowerCase().includes(searchLower) || 
                       (stud.nomor_induk || '').toLowerCase().includes(searchLower) ||
-                      (stud.kelas || '').toLowerCase().includes(searchLower);
+                      (stud.kelas || '').toLowerCase().includes(searchLower) ||
+                      instansiName.includes(searchLower) ||
+                      teacherName.includes(searchLower);
 
                     let matchesStatus = true;
                     if (plottingStatusFilter === 'belum_diplot') {
@@ -2727,7 +2786,10 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                     }
 
                     const matchesClass = !plottingClassFilter || stud.kelas === plottingClassFilter;
-                    return matchesSearch && matchesStatus && matchesClass;
+                    const matchesInstansi = !plottingInstansiFilter || company?.id === plottingInstansiFilter;
+                    const matchesTeacher = !plottingTeacherFilter || stud.id_pembimbing === plottingTeacherFilter;
+
+                    return matchesSearch && matchesStatus && matchesClass && matchesInstansi && matchesTeacher;
                   });
 
                   const itemsPerPage = 8;
