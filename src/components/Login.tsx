@@ -176,7 +176,7 @@ export const Login: React.FC<LoginProps> = ({
                   <div>
                     <strong className="block text-amber-900 font-bold">Sesi Otomatis Berakhir (Auto Logout)</strong>
                     <p className="text-[11px] text-amber-800 mt-0.5 font-normal">
-                      Anda telah keluar dari aplikasi secara otomatis karena tidak ada aktivitas selama 15 menit. Silakan masuk kembali.
+                      Sesi login Anda telah berakhir secara otomatis karena batas waktu / tidak ada aktivitas (5 menit untuk Siswa, 10 menit untuk Pengajar/Admin) agar sistem tidak menumpuk. Silakan masuk kembali.
                     </p>
                   </div>
                 </div>

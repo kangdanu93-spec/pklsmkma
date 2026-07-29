@@ -5,12 +5,13 @@ import {
 } from 'lucide-react';
 
 // Models & Types
-import { PklUser, PklInstansi, PklJournal, PklAttendance, PklPlacement, PklEvaluation, Announcement, MenuAccess } from './types';
+import { PklUser, PklInstansi, PklJournal, PklAttendance, PklPlacement, PklEvaluation, Announcement, MenuAccess, OnlineUserSession } from './types';
 
 // DB Operations
 import { 
   dbGetUsers, dbGetInstansi, dbGetPlacements, dbGetJournals, 
-  dbGetAttendance, dbGetEvaluations, dbGetAnnouncements, dbGetMenuAccess, isSuperAdmin, localDb
+  dbGetAttendance, dbGetEvaluations, dbGetAnnouncements, dbGetMenuAccess, isSuperAdmin, localDb,
+  dbUpdateUserHeartbeat, dbRemoveUserOnlineSession, dbGetOnlineUsers
 } from './utils/localDb';
 import { isSupabaseConnected, getSupabaseConfig, getSupabaseClient, syncSupabaseConfigFromServer } from './supabaseClient';
 
@@ -21,6 +22,7 @@ import TeacherDashboard from './components/TeacherDashboard';
 import IndustryDashboard from './components/IndustryDashboard';
 import AdminDashboard from './components/AdminDashboard';
 import StatsDashboard from './components/StatsDashboard';
+import OnlineUsersModal from './components/OnlineUsersModal';
 
 export default function App() {
   // Global lists
@@ -40,9 +42,12 @@ export default function App() {
     try {
       const savedSession = localStorage.getItem('SIM_PKL_ACTIVE_SESSION');
       const lastActivity = Number(localStorage.getItem('SIM_PKL_LAST_ACTIVITY') || '0');
-      const INACTIVITY_LIMIT = 15 * 60 * 1000; // 15 mins
-      if (savedSession && lastActivity > 0 && (Date.now() - lastActivity < INACTIVITY_LIMIT)) {
-        return JSON.parse(savedSession);
+      if (savedSession && lastActivity > 0) {
+        const parsed = JSON.parse(savedSession);
+        const limitMs = parsed.role === 'siswa' ? 5 * 60 * 1000 : 10 * 60 * 1000;
+        if (Date.now() - lastActivity < limitMs) {
+          return parsed;
+        }
       }
     } catch {
       // Ignore parse error
@@ -55,9 +60,27 @@ export default function App() {
   const [isUsingLocalStorageFallback, setIsUsingLocalStorageFallback] = useState(false);
   const [refreshCounter, setRefreshCounter] = useState(0);
 
-  // Inactivity auto-logout tracking (15 minutes threshold)
-  const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000;
+  // Online users tracking state
+  const [onlineUsers, setOnlineUsers] = useState<OnlineUserSession[]>([]);
+  const [isOnlineUsersModalOpen, setIsOnlineUsersModalOpen] = useState(false);
 
+  // Heartbeat tracker effect for online status
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const pulseHeartbeat = async () => {
+      dbUpdateUserHeartbeat(currentUser);
+      const active = await dbGetOnlineUsers();
+      setOnlineUsers(active);
+    };
+
+    pulseHeartbeat();
+    const interval = setInterval(pulseHeartbeat, 10000); // Pulse every 10 seconds
+
+    return () => clearInterval(interval);
+  }, [currentUser]);
+
+  // Inactivity auto-logout tracking (5 mins for student / siswa, 10 mins for others)
   // Track user activity (mousemove, keydown, click, scroll, touch) throttled to 5s
   useEffect(() => {
     let lastUpdate = 0;
@@ -66,6 +89,9 @@ export default function App() {
       if (now - lastUpdate > 5000) {
         lastUpdate = now;
         localStorage.setItem('SIM_PKL_LAST_ACTIVITY', now.toString());
+        if (currentUser) {
+          dbUpdateUserHeartbeat(currentUser);
+        }
       }
     };
 
@@ -91,8 +117,11 @@ export default function App() {
       const lastActivity = lastActivityStr ? Number(lastActivityStr) : Date.now();
       const inactiveDuration = Date.now() - lastActivity;
 
-      if (inactiveDuration >= INACTIVITY_TIMEOUT_MS) {
-        console.warn('Auto logout triggered due to 15 minutes of inactivity.');
+      // 5 minutes for student (siswa), 10 minutes for others
+      const timeoutMs = currentUser.role === 'siswa' ? 5 * 60 * 1000 : 10 * 60 * 1000;
+
+      if (inactiveDuration >= timeoutMs) {
+        console.warn(`Auto logout triggered due to ${currentUser.role === 'siswa' ? '5 minutes (Siswa)' : '10 minutes'} of inactivity.`);
         handleLogout();
         setSessionExpiredNotice(true);
       }
@@ -192,7 +221,7 @@ export default function App() {
         setSbDetails(null);
       }
 
-      // 2. Fetch all collections concurrently with 2.5s maximum timeout
+      // 2. Fetch all collections concurrently with 8.0s maximum timeout to give Supabase & Postgres enough time
       const fetchPromise = Promise.all([
         dbGetUsers().catch(() => ({ data: [], fromSupabase: false })),
         dbGetInstansi().catch(() => ({ data: [], fromSupabase: false })),
@@ -204,7 +233,7 @@ export default function App() {
       ]);
 
       const fetchTimeoutPromise = new Promise<null>((resolve) =>
-        setTimeout(() => resolve(null), 2500)
+        setTimeout(() => resolve(null), 8000)
       );
 
       const fetchResult = await Promise.race([fetchPromise, fetchTimeoutPromise]);
@@ -250,7 +279,12 @@ export default function App() {
         }
       }
 
-      if (connected && !resUsers.fromSupabase) {
+      const connectedFromSupabase = Boolean(
+        resUsers.fromSupabase || resInst.fromSupabase || resPlace.fromSupabase ||
+        resJour.fromSupabase || resAtt.fromSupabase || resEvals.fromSupabase || resAnns.fromSupabase
+      );
+
+      if (connected && !connectedFromSupabase) {
         setIsUsingLocalStorageFallback(true);
       } else {
         setIsUsingLocalStorageFallback(false);
@@ -319,6 +353,9 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    if (currentUser) {
+      dbRemoveUserOnlineSession(currentUser.id);
+    }
     const sb = getSupabaseClient();
     if (sb) {
       await sb.auth.signOut().catch(() => {});
@@ -440,9 +477,25 @@ export default function App() {
                     )}
                   </div>
 
-                  <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full text-[10px] font-bold" title="Sesi terproteksi. Otomatis logout jika tidak ada aktivitas selama 15 menit">
+                  {/* Online Users Live Tracker Pill Badge */}
+                  <button
+                    onClick={() => setIsOnlineUsersModalOpen(true)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-full text-[10px] font-bold cursor-pointer transition-all shadow-2xs"
+                    title="Klik untuk melihat daftar pengguna yang sedang online / aktif"
+                  >
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <span>{onlineUsers.length || 1} Online</span>
+                  </button>
+
+                  <div 
+                    className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full text-[10px] font-bold" 
+                    title={`Sesi terproteksi. Otomatis logout jika tidak ada aktivitas selama ${currentUser.role === 'siswa' ? '5' : '10'} menit`}
+                  >
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <span>Sesi Aktif (Auto Logout 15m)</span>
+                    <span>Sesi Aktif (Auto Logout {currentUser.role === 'siswa' ? '5m' : '10m'})</span>
                   </div>
                   <div className="text-right leading-none">
                     <span className="text-xs font-bold text-slate-800 block">{currentUser.nama}</span>
@@ -538,6 +591,13 @@ export default function App() {
           <p className="text-slate-500 font-medium text-xs">Sistem Manajemen Praktik Kerja Lapangan</p>
         </div>
       </footer>
+
+      {/* ONLINE USERS MODAL */}
+      <OnlineUsersModal 
+        isOpen={isOnlineUsersModalOpen} 
+        onClose={() => setIsOnlineUsersModalOpen(false)} 
+        currentUserId={currentUser?.id} 
+      />
 
     </div>
   );

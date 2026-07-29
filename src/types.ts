@@ -99,6 +99,17 @@ export interface MenuAccess {
   deskripsi: string;
 }
 
+export interface OnlineUserSession {
+  userId: string;
+  email: string;
+  nama: string;
+  role: UserRole;
+  kelas?: string;
+  nomor_induk?: string;
+  lastActive: number; // timestamp in ms
+  deviceInfo?: string;
+}
+
 export interface TeacherMonitoring {
   id: string;
   id_guru: string;

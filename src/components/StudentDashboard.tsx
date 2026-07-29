@@ -283,7 +283,20 @@ export default function StudentDashboard({ student, instansiList, announcements,
   }
 
   return (
-    <div className="space-y-8" id="student-dashboard">
+    <div className="space-y-6" id="student-dashboard">
+      {/* SESSION DURATION NOTICE BANNER FOR STUDENTS */}
+      <div className="bg-amber-50/90 border border-amber-200 text-amber-900 px-4 py-3 rounded-2xl text-xs font-medium flex items-center justify-between gap-3 shadow-xs">
+        <div className="flex items-center gap-2.5">
+          <Clock className="w-4 h-4 text-amber-600 shrink-0 animate-pulse" />
+          <span>
+            <strong className="font-bold">Batas Sesi Siswa: 5 Menit.</strong> Otomatis logout jika tidak ada aktivitas selama 5 menit agar traffic sistem tetap lancar & tidak menumpuk.
+          </span>
+        </div>
+        <span className="px-2.5 py-1 bg-amber-200/80 text-amber-900 rounded-lg font-bold text-[10px] uppercase shrink-0 tracking-wider">
+          Max 5 Menit
+        </span>
+      </div>
+
       {/* 1. HEADER RINGKASAN SISWA & STATUS PENEMPATAN */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
         <div className="md:col-span-8 bg-gradient-to-r from-indigo-900 to-indigo-950 rounded-2xl p-6 text-white flex flex-col justify-between shadow-sm">

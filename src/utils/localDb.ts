@@ -1,6 +1,6 @@
 import { getSupabaseClient, getSupabaseNoSessionClient } from '../supabaseClient';
 import { 
-  PklUser, PklInstansi, PklPlacement, PklJournal, PklAttendance, PklEvaluation, Announcement, PklClass, MenuAccess, TeacherMonitoring 
+  PklUser, PklInstansi, PklPlacement, PklJournal, PklAttendance, PklEvaluation, Announcement, PklClass, MenuAccess, TeacherMonitoring, OnlineUserSession 
 } from '../types';
 
 // SQL migration schema to show in the UI for users to copy/paste into Supabase
@@ -147,17 +147,48 @@ CREATE TABLE IF NOT EXISTS pkl_settings (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Nonaktifkan RLS agar aplikasi dapat membaca dan menulis data tanpa kendala Policy (untuk mode demo/sandbox)
-ALTER TABLE pkl_instansi DISABLE ROW LEVEL SECURITY;
-ALTER TABLE pkl_users DISABLE ROW LEVEL SECURITY;
-ALTER TABLE pkl_placements DISABLE ROW LEVEL SECURITY;
-ALTER TABLE pkl_journals DISABLE ROW LEVEL SECURITY;
-ALTER TABLE pkl_attendance DISABLE ROW LEVEL SECURITY;
-ALTER TABLE pkl_evaluations DISABLE ROW LEVEL SECURITY;
-ALTER TABLE pkl_announcements DISABLE ROW LEVEL SECURITY;
-ALTER TABLE pkl_classes DISABLE ROW LEVEL SECURITY;
-ALTER TABLE pkl_teacher_monitoring DISABLE ROW LEVEL SECURITY;
-ALTER TABLE pkl_settings DISABLE ROW LEVEL SECURITY;
+-- Enable Row Level Security (RLS) & define access policies
+ALTER TABLE pkl_instansi ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pkl_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pkl_placements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pkl_journals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pkl_attendance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pkl_evaluations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pkl_announcements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pkl_classes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pkl_teacher_monitoring ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pkl_settings ENABLE ROW LEVEL SECURITY;
+
+-- Allow public access policies for application database queries
+DROP POLICY IF EXISTS "Public access for pkl_instansi" ON pkl_instansi;
+CREATE POLICY "Public access for pkl_instansi" ON pkl_instansi FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public access for pkl_users" ON pkl_users;
+CREATE POLICY "Public access for pkl_users" ON pkl_users FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public access for pkl_placements" ON pkl_placements;
+CREATE POLICY "Public access for pkl_placements" ON pkl_placements FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public access for pkl_journals" ON pkl_journals;
+CREATE POLICY "Public access for pkl_journals" ON pkl_journals FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public access for pkl_attendance" ON pkl_attendance;
+CREATE POLICY "Public access for pkl_attendance" ON pkl_attendance FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public access for pkl_evaluations" ON pkl_evaluations;
+CREATE POLICY "Public access for pkl_evaluations" ON pkl_evaluations FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public access for pkl_announcements" ON pkl_announcements;
+CREATE POLICY "Public access for pkl_announcements" ON pkl_announcements FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public access for pkl_classes" ON pkl_classes;
+CREATE POLICY "Public access for pkl_classes" ON pkl_classes FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public access for pkl_teacher_monitoring" ON pkl_teacher_monitoring;
+CREATE POLICY "Public access for pkl_teacher_monitoring" ON pkl_teacher_monitoring FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public access for pkl_settings" ON pkl_settings;
+CREATE POLICY "Public access for pkl_settings" ON pkl_settings FOR ALL USING (true) WITH CHECK (true);
 
 -- Tambahkan master kelas awal
 INSERT INTO pkl_classes (id, nama_kelas, jurusan) VALUES
@@ -2207,6 +2238,120 @@ export async function dbResetSettings(): Promise<{ success: boolean, fromSupabas
   }
 
   return { success, fromSupabase, error: errorMsg };
+}
+
+// ---------------------- ONLINE USER TRACKING ----------------------
+
+export async function dbUpdateUserHeartbeat(user: PklUser): Promise<OnlineUserSession[]> {
+  try {
+    const raw = localStorage.getItem('SIM_PKL_ONLINE_SESSIONS');
+    let sessions: OnlineUserSession[] = raw ? JSON.parse(raw) : [];
+    const now = Date.now();
+    
+    // Filter out inactive sessions (> 3 minutes)
+    sessions = sessions.filter(s => now - s.lastActive < 3 * 60 * 1000);
+    
+    const existingIndex = sessions.findIndex(s => s.userId === user.id || s.email === user.email);
+    const updatedSession: OnlineUserSession = {
+      userId: user.id,
+      email: user.email,
+      nama: user.nama,
+      role: user.role,
+      kelas: user.kelas,
+      nomor_induk: user.nomor_induk,
+      lastActive: now,
+      deviceInfo: typeof navigator !== 'undefined' ? (navigator.userAgent.includes('Mobile') ? 'Smartphone' : 'Desktop/Laptop') : 'Web'
+    };
+
+    if (existingIndex >= 0) {
+      sessions[existingIndex] = updatedSession;
+    } else {
+      sessions.push(updatedSession);
+    }
+
+    localStorage.setItem('SIM_PKL_ONLINE_SESSIONS', JSON.stringify(sessions));
+
+    // Try storing in Supabase pkl_settings or broadcasting if available
+    const sb = getSupabaseClient();
+    if (sb) {
+      try {
+        await sb.from('pkl_settings').upsert({
+          key: `online_${user.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`,
+          value: JSON.stringify(updatedSession)
+        });
+      } catch (err) {}
+    }
+
+    return sessions;
+  } catch (e) {
+    console.error('Heartbeat update error:', e);
+    return [];
+  }
+}
+
+export async function dbRemoveUserOnlineSession(userId: string) {
+  try {
+    const raw = localStorage.getItem('SIM_PKL_ONLINE_SESSIONS');
+    if (raw) {
+      let sessions: OnlineUserSession[] = JSON.parse(raw);
+      sessions = sessions.filter(s => s.userId !== userId && s.email !== userId);
+      localStorage.setItem('SIM_PKL_ONLINE_SESSIONS', JSON.stringify(sessions));
+    }
+
+    const sb = getSupabaseClient();
+    if (sb) {
+      try {
+        await sb.from('pkl_settings').delete().eq('key', `online_${userId.replace(/[^a-zA-Z0-9_-]/g, '_')}`);
+      } catch (err) {}
+    }
+  } catch (e) {
+    console.error('Remove online session error:', e);
+  }
+}
+
+export async function dbGetOnlineUsers(): Promise<OnlineUserSession[]> {
+  const now = Date.now();
+  let localSessions: OnlineUserSession[] = [];
+  try {
+    const raw = localStorage.getItem('SIM_PKL_ONLINE_SESSIONS');
+    if (raw) {
+      localSessions = JSON.parse(raw);
+      localSessions = localSessions.filter(s => now - s.lastActive < 3 * 60 * 1000);
+    }
+  } catch (e) {}
+
+  const sb = getSupabaseClient();
+  if (sb) {
+    try {
+      const { data } = await sb.from('pkl_settings').select('key, value').like('key', 'online_%');
+      if (data && data.length > 0) {
+        const remoteSessions: OnlineUserSession[] = [];
+        data.forEach((row: any) => {
+          try {
+            const parsed: OnlineUserSession = JSON.parse(row.value);
+            if (now - parsed.lastActive < 3 * 60 * 1000) {
+              remoteSessions.push(parsed);
+            }
+          } catch (e2) {}
+        });
+
+        // Merge local & remote sessions by email
+        const sessionMap = new Map<string, OnlineUserSession>();
+        localSessions.forEach(s => sessionMap.set(s.email, s));
+        remoteSessions.forEach(s => {
+          const existing = sessionMap.get(s.email);
+          if (!existing || s.lastActive > existing.lastActive) {
+            sessionMap.set(s.email, s);
+          }
+        });
+        const merged = Array.from(sessionMap.values());
+        localStorage.setItem('SIM_PKL_ONLINE_SESSIONS', JSON.stringify(merged));
+        return merged;
+      }
+    } catch (e) {}
+  }
+
+  return localSessions;
 }
 
 
