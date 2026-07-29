@@ -192,9 +192,9 @@ ON CONFLICT (id) DO NOTHING;
 
 // Initial seed data for local storage
 const INITIAL_INSTANSI: PklInstansi[] = [
-  { id: 'inst-1', nama_instansi: 'PT. Solusi Digital', alamat: 'Jl. Tekno Raya No. 10, Jakarta Selatan', kuota: 5, pembimbing_nama: 'Joko Prasetyo', pembimbing_telp: '081234567800' },
-  { id: 'inst-2', nama_instansi: 'Bank Mandiri Tbk', alamat: 'Jl. Jenderal Sudirman Kav 52-53, Jakarta Pusat', kuota: 3, pembimbing_nama: 'Lisa Amalia', pembimbing_telp: '081234567801' },
-  { id: 'inst-3', nama_instansi: 'PT. Telkom Indonesia', alamat: 'Jl. Japati No. 1, Bandung, Jawa Barat', kuota: 4, pembimbing_nama: 'Rendra Siregar', pembimbing_telp: '081234567802' },
+  { id: '8a123bc4-56de-78fa-90bc-123456789abc', nama_instansi: 'PT. Solusi Digital', alamat: 'Jl. Tekno Raya No. 10, Jakarta Selatan', kuota: 5, pembimbing_nama: 'Joko Prasetyo', pembimbing_telp: '081234567800' },
+  { id: '9b123bc4-56de-78fa-90bc-123456789abc', nama_instansi: 'Bank Mandiri Tbk', alamat: 'Jl. Jenderal Sudirman Kav 52-53, Jakarta Pusat', kuota: 3, pembimbing_nama: 'Lisa Amalia', pembimbing_telp: '081234567801' },
+  { id: 'a3123bc4-56de-78fa-90bc-123456789abc', nama_instansi: 'PT. Telkom Indonesia', alamat: 'Jl. Japati No. 1, Bandung, Jawa Barat', kuota: 4, pembimbing_nama: 'Rendra Siregar', pembimbing_telp: '081234567802' },
 ];
 
 const INITIAL_USERS: PklUser[] = [
@@ -206,18 +206,18 @@ const INITIAL_USERS: PklUser[] = [
   { id: 'budi@simpkl.com', email: 'budi@simpkl.com', password: 'password123', nama: 'Drs. Budi Santoso', role: 'guru', nomor_induk: 'NIP19750821', telepon: '081211223344' },
   { id: 'sri@simpkl.com', email: 'sri@simpkl.com', password: 'password123', nama: 'Sri Wahyuni M.Kom', role: 'guru', nomor_induk: 'NIP19820412', telepon: '081299887766' },
   // Industri
-  { id: 'joko@solusidigital.com', email: 'joko@solusidigital.com', password: 'password123', nama: 'Joko Prasetyo (PT. Solusi Digital)', role: 'industri', nomor_induk: 'NIKSD098', telepon: '081234567800', id_instansi: 'inst-1' },
-  { id: 'lisa@bankmandiri.com', email: 'lisa@bankmandiri.com', password: 'password123', nama: 'Lisa Amalia (Bank Mandiri)', role: 'industri', nomor_induk: 'NIKBM743', telepon: '081234567801', id_instansi: 'inst-2' },
+  { id: 'joko@solusidigital.com', email: 'joko@solusidigital.com', password: 'password123', nama: 'Joko Prasetyo (PT. Solusi Digital)', role: 'industri', nomor_induk: 'NIKSD098', telepon: '081234567800', id_instansi: '8a123bc4-56de-78fa-90bc-123456789abc' },
+  { id: 'lisa@bankmandiri.com', email: 'lisa@bankmandiri.com', password: 'password123', nama: 'Lisa Amalia (Bank Mandiri)', role: 'industri', nomor_induk: 'NIKBM743', telepon: '081234567801', id_instansi: '9b123bc4-56de-78fa-90bc-123456789abc' },
   // Siswa
-  { id: 'ahmad@simpkl.com', email: 'ahmad@simpkl.com', password: 'password123', nama: 'Ahmad Fauzi', role: 'siswa', nomor_induk: 'NISN0062345', telepon: '085711223344', kelas: 'XII RPL 1', jurusan: 'Rekayasa Perangkat Lunak', id_instansi: 'inst-1', id_pembimbing: 'budi@simpkl.com' },
-  { id: 'rina@simpkl.com', email: 'rina@simpkl.com', password: 'password123', nama: 'Rina Wijaya', role: 'siswa', nomor_induk: 'NISN0063456', telepon: '085755667788', kelas: 'XII TKJ 2', jurusan: 'Teknik Komputer & Jaringan', id_instansi: 'inst-2', id_pembimbing: 'sri@simpkl.com' },
+  { id: 'ahmad@simpkl.com', email: 'ahmad@simpkl.com', password: 'password123', nama: 'Ahmad Fauzi', role: 'siswa', nomor_induk: 'NISN0062345', telepon: '085711223344', kelas: 'XII RPL 1', jurusan: 'Rekayasa Perangkat Lunak', id_instansi: '8a123bc4-56de-78fa-90bc-123456789abc', id_pembimbing: 'budi@simpkl.com' },
+  { id: 'rina@simpkl.com', email: 'rina@simpkl.com', password: 'password123', nama: 'Rina Wijaya', role: 'siswa', nomor_induk: 'NISN0063456', telepon: '085755667788', kelas: 'XII TKJ 2', jurusan: 'Teknik Komputer & Jaringan', id_instansi: '9b123bc4-56de-78fa-90bc-123456789abc', id_pembimbing: 'sri@simpkl.com' },
   { id: 'dani@simpkl.com', email: 'dani@simpkl.com', password: 'password123', nama: 'Dani Setiawan', role: 'siswa', nomor_induk: 'NISN0064567', telepon: '085799001122', kelas: 'XII RPL 2', jurusan: 'Rekayasa Perangkat Lunak', id_pembimbing: 'budi@simpkl.com' }, // belum PKL
 ];
 
 const INITIAL_PLACEMENTS: PklPlacement[] = [
-  { id: 'place-1', id_siswa: 'ahmad@simpkl.com', id_instansi: 'inst-1', tanggal_mulai: '2026-07-01', tanggal_selesai: '2026-10-01', status: 'disetujui', catatan: 'Penempatan di divisi Mobile Developer.' },
-  { id: 'place-2', id_siswa: 'rina@simpkl.com', id_instansi: 'inst-2', tanggal_mulai: '2026-07-01', tanggal_selesai: '2026-10-01', status: 'disetujui', catatan: 'Penempatan di divisi IT Support.' },
-  { id: 'place-3', id_siswa: 'dani@simpkl.com', id_instansi: 'inst-3', tanggal_mulai: '2026-08-01', tanggal_selesai: '2026-11-01', status: 'pending', catatan: 'Mengajukan magang di Web Developer.' },
+  { id: 'place-1', id_siswa: 'ahmad@simpkl.com', id_instansi: '8a123bc4-56de-78fa-90bc-123456789abc', tanggal_mulai: '2026-07-01', tanggal_selesai: '2026-10-01', status: 'disetujui', catatan: 'Penempatan di divisi Mobile Developer.' },
+  { id: 'place-2', id_siswa: 'rina@simpkl.com', id_instansi: '9b123bc4-56de-78fa-90bc-123456789abc', tanggal_mulai: '2026-07-01', tanggal_selesai: '2026-10-01', status: 'disetujui', catatan: 'Penempatan di divisi IT Support.' },
+  { id: 'place-3', id_siswa: 'dani@simpkl.com', id_instansi: 'a3123bc4-56de-78fa-90bc-123456789abc', tanggal_mulai: '2026-08-01', tanggal_selesai: '2026-11-01', status: 'pending', catatan: 'Mengajukan magang di Web Developer.' },
 ];
 
 const INITIAL_JOURNALS: PklJournal[] = [
@@ -503,12 +503,6 @@ export const localDb = {
 
 export async function autoSeedSupabase(sb: any) {
   try {
-    const INSTANSI_MAP: { [key: string]: string } = {
-      'inst-1': '8a123bc4-56de-78fa-90bc-123456789abc',
-      'inst-2': '9b123bc4-56de-78fa-90bc-123456789abc',
-      'inst-3': 'a3123bc4-56de-78fa-90bc-123456789abc'
-    };
-
     // 1. Instansi
     const { data: instCheck, error: instErr } = await sb.from('pkl_instansi').select('id');
     if (!instErr && (!instCheck || instCheck.length === 0)) {
@@ -852,7 +846,7 @@ export async function dbDeleteUser(userId: string): Promise<{ success: boolean, 
 
 // ---------------------- INSTANSI ----------------------
 
-export async function dbGetInstansi(): Promise<{ data: PklInstansi[], fromSupabase: boolean }> {
+export async function dbGetInstansi(): Promise<{ data: PklInstansi[], fromSupabase: boolean, error?: string }> {
   const sb = getSupabaseClient();
   if (sb) {
     try {
@@ -863,37 +857,73 @@ export async function dbGetInstansi(): Promise<{ data: PklInstansi[], fromSupaba
           await autoSeedSupabase(sb);
           const { data: refetched } = await sb.from('pkl_instansi').select('*').order('nama_instansi');
           if (refetched && refetched.length > 0) {
-            return { data: refetched as PklInstansi[], fromSupabase: true };
+            const list = refetched as PklInstansi[];
+            localDb.set('SIM_PKL_INSTANSI', list);
+            return { data: list, fromSupabase: true };
           }
         } else {
-          return { data: data as PklInstansi[], fromSupabase: true };
+          const list = data as PklInstansi[];
+          localDb.set('SIM_PKL_INSTANSI', list);
+          return { data: list, fromSupabase: true };
         }
+      } else if (error) {
+        console.warn('Supabase fetch instansi error:', error);
       }
-    } catch (e) {}
+    } catch (e: any) {
+      console.error('Supabase fetch instansi exception:', e);
+    }
   }
   return { data: localDb.get<PklInstansi>('SIM_PKL_INSTANSI'), fromSupabase: false };
 }
 
 export async function dbSaveInstansi(instansi: PklInstansi): Promise<{ success: boolean, data?: PklInstansi, fromSupabase: boolean, error?: string }> {
-  // Ensure the ID is a valid UUID before saving
-  if (!isUuid(instansi.id)) {
-    instansi.id = generateUUID();
+  // Determine target UUID for Supabase
+  let targetId = instansi.id;
+  if (INSTANSI_MAP[targetId]) {
+    targetId = INSTANSI_MAP[targetId];
+  } else if (!isUuid(targetId)) {
+    targetId = generateUUID();
   }
+
+  // Create sanitized database record for Supabase
+  const dbInstansi = {
+    id: targetId,
+    nama_instansi: instansi.nama_instansi,
+    alamat: instansi.alamat,
+    kuota: Number(instansi.kuota) || 1,
+    pembimbing_nama: instansi.pembimbing_nama || null,
+    pembimbing_telp: instansi.pembimbing_telp || null
+  };
+
+  const returnedInstansi: PklInstansi = {
+    id: targetId,
+    nama_instansi: instansi.nama_instansi,
+    alamat: instansi.alamat,
+    kuota: Number(instansi.kuota) || 1,
+    pembimbing_nama: instansi.pembimbing_nama || undefined,
+    pembimbing_telp: instansi.pembimbing_telp || undefined
+  };
 
   const sb = getSupabaseClient();
   let fromSupabase = false;
   let success = false;
-  let returnedData = instansi;
   let errorMsg = '';
 
   if (sb) {
     try {
-      const { data, error } = await sb.from('pkl_instansi').upsert(instansi).select();
-      if (!error && data && data.length > 0) {
+      const { data, error } = await sb.from('pkl_instansi').upsert(dbInstansi).select();
+      if (!error) {
         success = true;
         fromSupabase = true;
-        returnedData = data[0] as PklInstansi;
-      } else if (error) {
+        if (data && data.length > 0) {
+          returnedInstansi.id = data[0].id;
+          returnedInstansi.nama_instansi = data[0].nama_instansi;
+          returnedInstansi.alamat = data[0].alamat;
+          returnedInstansi.kuota = data[0].kuota;
+          returnedInstansi.pembimbing_nama = data[0].pembimbing_nama || undefined;
+          returnedInstansi.pembimbing_telp = data[0].pembimbing_telp || undefined;
+        }
+      } else {
         if (error.code === 'P0001' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
           console.warn('Supabase table pkl_instansi not found, proceeding locally');
         } else {
@@ -904,10 +934,6 @@ export async function dbSaveInstansi(instansi: PklInstansi): Promise<{ success: 
           }
           fromSupabase = true;
         }
-      } else {
-        // Upsert succeeded but select returned empty, likely due to RLS read policy
-        success = true;
-        fromSupabase = true;
       }
     } catch (e: any) {
       console.error('Supabase save instansi threw exception:', e);
@@ -915,39 +941,87 @@ export async function dbSaveInstansi(instansi: PklInstansi): Promise<{ success: 
     }
   }
 
+  // Update local storage for data alignment
   const list = localDb.get<PklInstansi>('SIM_PKL_INSTANSI');
-  const index = list.findIndex(i => i.id === instansi.id);
+  const index = list.findIndex(i => i.id === instansi.id || i.id === targetId);
   if (index !== -1) {
-    list[index] = returnedData;
+    list[index] = returnedInstansi;
   } else {
-    list.push(returnedData);
+    list.push(returnedInstansi);
   }
   localDb.set('SIM_PKL_INSTANSI', list);
 
+  // If instansi ID changed (e.g., from 'inst-1' to UUID), align local users & placements
+  if (instansi.id !== targetId) {
+    const users = localDb.get<PklUser>('SIM_PKL_USERS');
+    let usersUpdated = false;
+    const updatedUsers = users.map(u => {
+      if (u.id_instansi === instansi.id) {
+        usersUpdated = true;
+        return { ...u, id_instansi: targetId };
+      }
+      return u;
+    });
+    if (usersUpdated) localDb.set('SIM_PKL_USERS', updatedUsers);
+
+    const placements = localDb.get<PklPlacement>('SIM_PKL_PLACEMENTS');
+    let placeUpdated = false;
+    const updatedPlaces = placements.map(p => {
+      if (p.id_instansi === instansi.id) {
+        placeUpdated = true;
+        return { ...p, id_instansi: targetId };
+      }
+      return p;
+    });
+    if (placeUpdated) localDb.set('SIM_PKL_PLACEMENTS', updatedPlaces);
+  }
+
   if (!fromSupabase) success = true;
-  return { success, data: returnedData, fromSupabase, error: errorMsg };
+  return { success, data: returnedInstansi, fromSupabase, error: errorMsg };
 }
 
-export async function dbDeleteInstansi(id: string): Promise<{ success: boolean, fromSupabase: boolean }> {
+export async function dbDeleteInstansi(id: string): Promise<{ success: boolean, fromSupabase: boolean, error?: string }> {
+  let targetId = id;
+  if (INSTANSI_MAP[id]) {
+    targetId = INSTANSI_MAP[id];
+  }
+
   const sb = getSupabaseClient();
   let fromSupabase = false;
   let success = false;
+  let errorMsg = '';
 
   if (sb) {
     try {
-      const { error } = await sb.from('pkl_instansi').delete().eq('id', id);
+      // 1. Unlink dependent users & placements in Supabase
+      await sb.from('pkl_users').update({ id_instansi: null }).eq('id_instansi', targetId);
+      await sb.from('pkl_placements').delete().eq('id_instansi', targetId);
+
+      // 2. Delete instansi record
+      const { error } = await sb.from('pkl_instansi').delete().eq('id', targetId);
       if (!error) {
         success = true;
         fromSupabase = true;
+      } else {
+        console.error('Supabase delete instansi failed:', error);
+        errorMsg = error.message;
+        if (error.code === '42501') {
+          errorMsg = 'Row Level Security (RLS) aktif pada tabel pkl_instansi. Silakan nonaktifkan RLS dengan perintah SQL: "ALTER TABLE pkl_instansi DISABLE ROW LEVEL SECURITY;"';
+        }
+        fromSupabase = true;
       }
-    } catch (e) {}
+    } catch (e: any) {
+      console.error('Supabase delete instansi exception:', e);
+      errorMsg = e?.message || String(e);
+    }
   }
 
+  // Update local storage
   const list = localDb.get<PklInstansi>('SIM_PKL_INSTANSI');
-  localDb.set('SIM_PKL_INSTANSI', list.filter(i => i.id !== id));
+  localDb.set('SIM_PKL_INSTANSI', list.filter(i => i.id !== id && i.id !== targetId));
 
   if (!fromSupabase) success = true;
-  return { success, fromSupabase };
+  return { success, fromSupabase, error: errorMsg };
 }
 
 // ---------------------- PLACEMENTS ----------------------

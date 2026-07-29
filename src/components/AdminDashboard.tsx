@@ -19,7 +19,7 @@ import {
   dbGetAttendance, dbGetClasses, dbSaveClass, dbDeleteClass,
   dbGetMenuAccess, dbSaveMenuAccess, isSuperAdmin,
   syncLocalDataToSupabase, dbGetTeacherMonitorings,
-  dbGetSettings, dbSaveSetting, dbResetSettings, localDb
+  dbGetSettings, dbSaveSetting, dbResetSettings, localDb, generateUUID
 } from '../utils/localDb';
 import { isSupabaseConnected } from '../supabaseClient';
 
@@ -344,9 +344,21 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
           resSettings
         ] = res;
 
-        setUsers(resUsers.data || []);
+        const rawUsers = resUsers.data || [];
+        const rawPlacements = resPlace.data || [];
+        const syncedUsers = rawUsers.map(u => {
+          if (u.role === 'siswa' && !u.id_instansi) {
+            const place = rawPlacements.find(p => p.id_siswa === u.id);
+            if (place?.id_instansi) {
+              return { ...u, id_instansi: place.id_instansi };
+            }
+          }
+          return u;
+        });
+
+        setUsers(syncedUsers);
         setInstansiList(resInst.data || []);
-        setPlacements(resPlace.data || []);
+        setPlacements(rawPlacements);
         setEvaluations(resEvals.data || []);
         setAnnouncements(resAnns.data || []);
         setAttendance(resAtt.data || []);
@@ -364,9 +376,17 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
         }
       } else {
         // Fallback to local cache if network/supabase promise timed out
-        setUsers(localDb.get<PklUser>('SIM_PKL_USERS'));
+        const localPlacements = localDb.get<PklPlacement>('SIM_PKL_PLACEMENTS');
+        const localUsers = localDb.get<PklUser>('SIM_PKL_USERS').map(u => {
+          if (u.role === 'siswa' && !u.id_instansi) {
+            const p = localPlacements.find(place => place.id_siswa === u.id);
+            if (p?.id_instansi) return { ...u, id_instansi: p.id_instansi };
+          }
+          return u;
+        });
+        setUsers(localUsers);
         setInstansiList(localDb.get<PklInstansi>('SIM_PKL_INSTANSI'));
-        setPlacements(localDb.get<PklPlacement>('SIM_PKL_PLACEMENTS'));
+        setPlacements(localPlacements);
         setEvaluations(localDb.get<PklEvaluation>('SIM_PKL_EVALUATIONS'));
         setAnnouncements(localDb.get<Announcement>('SIM_PKL_ANNOUNCEMENTS'));
         setAttendance(localDb.get<any>('SIM_PKL_ATTENDANCE'));
@@ -375,9 +395,17 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
       }
     } catch (e) {
       console.error('Error in fetchAdminData:', e);
-      setUsers(localDb.get<PklUser>('SIM_PKL_USERS'));
+      const localPlacements = localDb.get<PklPlacement>('SIM_PKL_PLACEMENTS');
+      const localUsers = localDb.get<PklUser>('SIM_PKL_USERS').map(u => {
+        if (u.role === 'siswa' && !u.id_instansi) {
+          const p = localPlacements.find(place => place.id_siswa === u.id);
+          if (p?.id_instansi) return { ...u, id_instansi: p.id_instansi };
+        }
+        return u;
+      });
+      setUsers(localUsers);
       setInstansiList(localDb.get<PklInstansi>('SIM_PKL_INSTANSI'));
-      setPlacements(localDb.get<PklPlacement>('SIM_PKL_PLACEMENTS'));
+      setPlacements(localPlacements);
       setEvaluations(localDb.get<PklEvaluation>('SIM_PKL_EVALUATIONS'));
       setAnnouncements(localDb.get<Announcement>('SIM_PKL_ANNOUNCEMENTS'));
       setAttendance(localDb.get<any>('SIM_PKL_ATTENDANCE'));
@@ -794,7 +822,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
     }
 
     const instansiToSave: PklInstansi = {
-      id: editingInstansiId || `inst-${Date.now()}`,
+      id: editingInstansiId || generateUUID(),
       nama_instansi: instNama.trim(),
       alamat: instAlamat.trim(),
       kuota: Number(instKuota),
@@ -2731,9 +2759,9 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                             <tbody className="divide-y divide-slate-50 text-slate-600">
                               {paginatedPlottingStudents.map((stud) => {
                                 const isEditing = editingStudentId === stud.id;
-                                const company = instansiList.find(i => i.id === stud.id_instansi);
-                                const currentTeacher = teachers.find(t => t.id === stud.id_pembimbing);
                                 const studentPlacement = placements.find(p => p.id_siswa === stud.id);
+                                const company = instansiList.find(i => i.id === stud.id_instansi || i.id === studentPlacement?.id_instansi);
+                                const currentTeacher = teachers.find(t => t.id === stud.id_pembimbing);
                                 
                                   return (
                                     <tr key={stud.id} className="hover:bg-slate-50/50">

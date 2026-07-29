@@ -168,47 +168,6 @@ export const Login: React.FC<LoginProps> = ({
               </p>
             </div>
 
-            {/* Database Connection Status Indicator */}
-            <div className="p-3 bg-slate-50/50 border border-slate-100 rounded-2xl text-xs font-medium text-slate-500 flex flex-col gap-1">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Koneksi Database</span>
-                {isDbConnected ? (
-                  isUsingLocalStorageFallback ? (
-                    <span className="text-amber-500 font-bold flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block animate-pulse" />
-                      Cloud Offline (Sinking Lokal)
-                    </span>
-                  ) : (
-                    <span className="text-emerald-500 font-bold flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
-                      Cloud Aktif (Sinkron)
-                    </span>
-                  )
-                ) : (
-                  <span className="text-rose-500 font-bold flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />
-                    Lokal (Belum Hubung)
-                  </span>
-                )}
-              </div>
-              {isDbConnected && sbDetails?.url ? (
-                <div className="text-[10px] text-slate-400 truncate mt-0.5 font-mono">
-                  Host: {sbDetails.url.replace('https://', '')}
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    localStorage.removeItem('SIM_PKL_SUPABASE_URL');
-                    localStorage.removeItem('SIM_PKL_SUPABASE_ANON_KEY');
-                    window.location.reload();
-                  }}
-                  className="mt-1 text-indigo-600 hover:text-indigo-800 underline text-[10px] text-left cursor-pointer font-bold block"
-                >
-                  Hubungkan / Reset ke Database Cloud Default Sekarang (Klik di sini)
-                </button>
-              )}
-            </div>
 
             {sessionExpiredNotice && (
               <div className="p-3.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs font-semibold flex items-start justify-between gap-2 shadow-sm animate-pulse">

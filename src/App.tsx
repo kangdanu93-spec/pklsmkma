@@ -221,17 +221,29 @@ export default function App() {
         [resUsers, resInst, resPlace, resJour, resAtt, resEvals, resAnns] = fetchResult;
       }
 
-      setUsers(resUsers.data || []);
+      const rawUsers = resUsers.data || [];
+      const rawPlacements = resPlace.data || [];
+      const syncedUsers = rawUsers.map(u => {
+        if (u.role === 'siswa' && !u.id_instansi) {
+          const place = rawPlacements.find(p => p.id_siswa === u.id);
+          if (place?.id_instansi) {
+            return { ...u, id_instansi: place.id_instansi };
+          }
+        }
+        return u;
+      });
+
+      setUsers(syncedUsers);
       setInstansiList(resInst.data || []);
-      setPlacements(resPlace.data || []);
+      setPlacements(rawPlacements);
       setJournals(resJour.data || []);
       setAttendanceLogs(resAtt.data || []);
       setEvaluations(resEvals.data || []);
       setAnnouncements(resAnns.data || []);
 
       // Keep current logged-in user profile updated with the latest DB records in real-time
-      if (currentUser && resUsers.data) {
-        const freshUser = resUsers.data.find(u => u.id === currentUser.id);
+      if (currentUser && syncedUsers.length > 0) {
+        const freshUser = syncedUsers.find(u => u.id === currentUser.id);
         if (freshUser && JSON.stringify(freshUser) !== JSON.stringify(currentUser)) {
           setCurrentUser(freshUser);
           localStorage.setItem('SIM_PKL_ACTIVE_SESSION', JSON.stringify(freshUser));
@@ -403,6 +415,31 @@ export default function App() {
               <>
                 <div className="h-6 w-[1px] bg-slate-100 hidden md:block"></div>
                 <div className="flex items-center gap-3">
+                  {/* Database Status Badge - Authenticated Users Only */}
+                  <div className="relative group hidden sm:block">
+                    <div className={`flex items-center gap-1.5 px-2.5 py-1 border rounded-full text-[10px] font-bold cursor-pointer transition-all ${
+                      isDbConnected ? (
+                        isUsingLocalStorageFallback ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      ) : 'bg-rose-50 text-rose-700 border-rose-200'
+                    }`}>
+                      <Database className="w-3 h-3" />
+                      <span>{isDbConnected ? (isUsingLocalStorageFallback ? 'Cloud Offline (Lokal)' : 'Cloud Online (Sinkron)') : 'Lokal'}</span>
+                    </div>
+                    {sbDetails?.url && (
+                      <div className="absolute right-0 top-full mt-1.5 hidden group-hover:block z-50 bg-slate-900 text-white p-2.5 rounded-xl text-[10px] shadow-xl w-56 space-y-1">
+                        <div className="font-bold border-b border-slate-700 pb-1 flex justify-between">
+                          <span>Koneksi Database</span>
+                          <span className={isUsingLocalStorageFallback ? 'text-amber-400' : 'text-emerald-400'}>
+                            {isUsingLocalStorageFallback ? 'Cloud Offline' : 'Cloud Online'}
+                          </span>
+                        </div>
+                        <div className="text-slate-300 font-mono text-[9px] truncate">
+                          Host: {sbDetails.url.replace('https://', '')}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full text-[10px] font-bold" title="Sesi terproteksi. Otomatis logout jika tidak ada aktivitas selama 15 menit">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                     <span>Sesi Aktif (Auto Logout 15m)</span>
