@@ -106,6 +106,10 @@ export interface OnlineUserSession {
   role: UserRole;
   kelas?: string;
   nomor_induk?: string;
+  id_instansi?: string;
+  nama_instansi?: string;
+  id_pembimbing?: string;
+  nama_guru_pembimbing?: string;
   lastActive: number; // timestamp in ms
   deviceInfo?: string;
 }

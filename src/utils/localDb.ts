@@ -2251,6 +2251,54 @@ export async function dbUpdateUserHeartbeat(user: PklUser): Promise<OnlineUserSe
     // Filter out inactive sessions (> 3 minutes)
     sessions = sessions.filter(s => now - s.lastActive < 3 * 60 * 1000);
     
+    // Resolve instansi & guru pembimbing
+    let nama_instansi = '';
+    let nama_guru_pembimbing = '';
+    let id_instansi = user.id_instansi || '';
+    let id_pembimbing = user.id_pembimbing || '';
+
+    try {
+      // 1. Resolve Instansi
+      if (id_instansi) {
+        const rawInst = localStorage.getItem('SIM_PKL_INSTANSI');
+        if (rawInst) {
+          const instansiList: PklInstansi[] = JSON.parse(rawInst);
+          const matched = instansiList.find(i => i.id === id_instansi);
+          if (matched) nama_instansi = matched.nama_instansi;
+        }
+      }
+
+      // If user is siswa and instansi not set yet, check placements
+      if (!nama_instansi && user.role === 'siswa') {
+        const rawPlace = localStorage.getItem('SIM_PKL_PLACEMENTS');
+        if (rawPlace) {
+          const placements: PklPlacement[] = JSON.parse(rawPlace);
+          const pl = placements.find(p => p.id_siswa === user.id);
+          if (pl) {
+            id_instansi = pl.id_instansi;
+            const rawInst = localStorage.getItem('SIM_PKL_INSTANSI');
+            if (rawInst) {
+              const instansiList: PklInstansi[] = JSON.parse(rawInst);
+              const matched = instansiList.find(i => i.id === pl.id_instansi);
+              if (matched) nama_instansi = matched.nama_instansi;
+            }
+          }
+        }
+      }
+
+      // 2. Resolve Guru Pembimbing
+      if (user.role === 'guru') {
+        nama_guru_pembimbing = user.nama;
+      } else if (id_pembimbing) {
+        const rawUsers = localStorage.getItem('SIM_PKL_USERS');
+        if (rawUsers) {
+          const usersList: PklUser[] = JSON.parse(rawUsers);
+          const matchedGuru = usersList.find(u => u.id === id_pembimbing);
+          if (matchedGuru) nama_guru_pembimbing = matchedGuru.nama;
+        }
+      }
+    } catch (e) {}
+
     const existingIndex = sessions.findIndex(s => s.userId === user.id || s.email === user.email);
     const updatedSession: OnlineUserSession = {
       userId: user.id,
@@ -2259,6 +2307,10 @@ export async function dbUpdateUserHeartbeat(user: PklUser): Promise<OnlineUserSe
       role: user.role,
       kelas: user.kelas,
       nomor_induk: user.nomor_induk,
+      id_instansi,
+      nama_instansi,
+      id_pembimbing,
+      nama_guru_pembimbing,
       lastActive: now,
       deviceInfo: typeof navigator !== 'undefined' ? (navigator.userAgent.includes('Mobile') ? 'Smartphone' : 'Desktop/Laptop') : 'Web'
     };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, X, RefreshCw, Search, Shield, GraduationCap, Building2, UserCheck, Smartphone, Laptop, Clock, Activity, Wifi } from 'lucide-react';
+import { Users, X, RefreshCw, Search, Shield, GraduationCap, Building2, UserCheck, Smartphone, Laptop, Clock, Activity, Wifi, Filter } from 'lucide-react';
 import { OnlineUserSession, UserRole } from '../types';
 import { dbGetOnlineUsers } from '../utils/localDb';
 
@@ -13,6 +13,8 @@ export default function OnlineUsersModal({ isOpen, onClose, currentUserId }: Onl
   const [onlineList, setOnlineList] = useState<OnlineUserSession[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRole, setSelectedRole] = useState<'all' | UserRole>('all');
+  const [selectedInstansi, setSelectedInstansi] = useState<string>('all');
+  const [selectedGuru, setSelectedGuru] = useState<string>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
 
@@ -39,14 +41,31 @@ export default function OnlineUsersModal({ isOpen, onClose, currentUserId }: Onl
 
   if (!isOpen) return null;
 
+  // Get unique lists of instansi and guru from online users for drop-downs
+  const uniqueInstansiList = Array.from(
+    new Set(onlineList.map(u => u.nama_instansi).filter((val): val is string => Boolean(val)))
+  );
+
+  const uniqueGuruList = Array.from(
+    new Set(onlineList.map(u => u.nama_guru_pembimbing).filter((val): val is string => Boolean(val)))
+  );
+
   // Filter list
   const filteredUsers = onlineList.filter(u => {
-    const matchesSearch = u.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (u.kelas && u.kelas.toLowerCase().includes(searchQuery.toLowerCase())) ||
-                          (u.nomor_induk && u.nomor_induk.toLowerCase().includes(searchQuery.toLowerCase()));
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = !searchQuery || 
+                          u.nama.toLowerCase().includes(q) ||
+                          u.email.toLowerCase().includes(q) ||
+                          (u.kelas && u.kelas.toLowerCase().includes(q)) ||
+                          (u.nomor_induk && u.nomor_induk.toLowerCase().includes(q)) ||
+                          (u.nama_instansi && u.nama_instansi.toLowerCase().includes(q)) ||
+                          (u.nama_guru_pembimbing && u.nama_guru_pembimbing.toLowerCase().includes(q));
+
     const matchesRole = selectedRole === 'all' || u.role === selectedRole;
-    return matchesSearch && matchesRole;
+    const matchesInstansi = selectedInstansi === 'all' || u.nama_instansi === selectedInstansi;
+    const matchesGuru = selectedGuru === 'all' || u.nama_guru_pembimbing === selectedGuru;
+
+    return matchesSearch && matchesRole && matchesInstansi && matchesGuru;
   });
 
   const countByRole = {
@@ -78,9 +97,18 @@ export default function OnlineUsersModal({ isOpen, onClose, currentUserId }: Onl
     }
   };
 
+  const resetAllFilters = () => {
+    setSearchQuery('');
+    setSelectedRole('all');
+    setSelectedInstansi('all');
+    setSelectedGuru('all');
+  };
+
+  const hasActiveFilter = selectedRole !== 'all' || selectedInstansi !== 'all' || selectedGuru !== 'all' || searchQuery !== '';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden border border-slate-200 flex flex-col max-h-[85vh]">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden border border-slate-200 flex flex-col max-h-[88vh]">
         
         {/* Header */}
         <div className="bg-gradient-to-r from-indigo-900 via-indigo-950 to-slate-900 p-5 text-white flex items-center justify-between shrink-0">
@@ -99,7 +127,7 @@ export default function OnlineUsersModal({ isOpen, onClose, currentUserId }: Onl
                 </span>
               </div>
               <p className="text-xs text-indigo-200 mt-0.5">
-                Total {onlineList.length} pengguna sedang mengakses aplikasi saat ini
+                Total {onlineList.length} pengguna sedang aktif saat ini
               </p>
             </div>
           </div>
@@ -113,13 +141,13 @@ export default function OnlineUsersModal({ isOpen, onClose, currentUserId }: Onl
           </button>
         </div>
 
-        {/* Stats bar */}
+        {/* Role Bar */}
         <div className="grid grid-cols-4 gap-2 p-3 bg-slate-50 border-b border-slate-200 text-center shrink-0">
           <button
             onClick={() => setSelectedRole('all')}
             className={`p-2 rounded-xl transition-all cursor-pointer text-left border ${selectedRole === 'all' ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'}`}
           >
-            <div className="text-[10px] uppercase tracking-wider opacity-80 font-bold">Semua</div>
+            <div className="text-[10px] uppercase tracking-wider opacity-80 font-bold">Semua Role</div>
             <div className="text-base font-extrabold">{onlineList.length}</div>
           </button>
 
@@ -149,32 +177,92 @@ export default function OnlineUsersModal({ isOpen, onClose, currentUserId }: Onl
         </div>
 
         {/* Filter & Search Bar */}
-        <div className="p-3 border-b border-slate-100 bg-white flex items-center justify-between gap-3 shrink-0">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Cari nama, email, kelas..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-2 text-xs text-slate-400 hover:text-slate-600">
-                ×
-              </button>
-            )}
+        <div className="p-3 border-b border-slate-200 bg-white space-y-2 shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Cari nama, email, kelas, instansi, guru..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-8 py-1.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-2 text-xs text-slate-400 hover:text-slate-600">
+                  ×
+                </button>
+              )}
+            </div>
+
+            <button
+              onClick={fetchOnlineUsers}
+              disabled={isRefreshing}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shrink-0 border border-slate-200"
+              title="Refresh data online"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-indigo-600' : ''}`} />
+              <span>Refresh</span>
+            </button>
           </div>
 
-          <button
-            onClick={fetchOnlineUsers}
-            disabled={isRefreshing}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shrink-0"
-            title="Sembunyikan / Refresh data online"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-indigo-600' : ''}`} />
-            <span>Refresh</span>
-          </button>
+          {/* Advanced Dropdown Filters: Instansi & Guru Pembimbing */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+            {/* Instansi Filter Dropdown */}
+            <div className="relative">
+              <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 mb-0.5">
+                <Building2 className="w-3 h-3 text-purple-600" />
+                <span>Filter Instansi/Perusahaan PKL:</span>
+              </div>
+              <select
+                value={selectedInstansi}
+                onChange={e => setSelectedInstansi(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-2.5 py-1.5 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer"
+              >
+                <option value="all">Semua Instansi ({uniqueInstansiList.length})</option>
+                {uniqueInstansiList.map(inst => (
+                  <option key={inst} value={inst}>
+                    {inst}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Guru Pembimbing Filter Dropdown */}
+            <div className="relative">
+              <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 mb-0.5">
+                <UserCheck className="w-3 h-3 text-emerald-600" />
+                <span>Filter Guru Pembimbing:</span>
+              </div>
+              <select
+                value={selectedGuru}
+                onChange={e => setSelectedGuru(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-2.5 py-1.5 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer"
+              >
+                <option value="all">Semua Guru Pembimbing ({uniqueGuruList.length})</option>
+                {uniqueGuruList.map(guru => (
+                  <option key={guru} value={guru}>
+                    {guru}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Reset Filters chip */}
+          {hasActiveFilter && (
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[10px] text-slate-500 font-medium">
+                Menampilkan <strong className="text-indigo-600 font-extrabold">{filteredUsers.length}</strong> dari {onlineList.length} pengguna
+              </span>
+              <button
+                onClick={resetAllFilters}
+                className="text-[10px] font-bold text-rose-600 hover:text-rose-800 flex items-center gap-1 underline cursor-pointer"
+              >
+                Reset Semua Filter
+              </button>
+            </div>
+          )}
         </div>
 
         {/* User List Content */}
@@ -182,7 +270,15 @@ export default function OnlineUsersModal({ isOpen, onClose, currentUserId }: Onl
           {filteredUsers.length === 0 ? (
             <div className="text-center py-10 text-slate-400">
               <Users className="w-10 h-10 mx-auto mb-2 opacity-30" />
-              <p className="text-xs font-medium">Tidak ada pengguna online yang sesuai kriteria kueri.</p>
+              <p className="text-xs font-medium">Tidak ada pengguna online yang sesuai kriteria filter.</p>
+              {hasActiveFilter && (
+                <button
+                  onClick={resetAllFilters}
+                  className="mt-3 px-3 py-1 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-xl text-xs font-bold transition-all cursor-pointer border border-indigo-200"
+                >
+                  Reset Filter Search
+                </button>
+              )}
             </div>
           ) : (
             filteredUsers.map(user => {
@@ -196,7 +292,7 @@ export default function OnlineUsersModal({ isOpen, onClose, currentUserId }: Onl
                       : 'bg-white border-slate-100 hover:border-slate-200 hover:bg-slate-50/60'
                   }`}
                 >
-                  <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div className="relative shrink-0">
                       <div className="w-9 h-9 rounded-full bg-slate-800 text-white font-bold text-xs flex items-center justify-center uppercase shadow-xs">
                         {user.nama.substring(0, 2)}
@@ -204,7 +300,7 @@ export default function OnlineUsersModal({ isOpen, onClose, currentUserId }: Onl
                       <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full" />
                     </div>
 
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-bold text-slate-900 truncate">{user.nama}</span>
                         {isSelf && (
@@ -215,7 +311,7 @@ export default function OnlineUsersModal({ isOpen, onClose, currentUserId }: Onl
                         {getRoleBadge(user.role)}
                       </div>
                       
-                      <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5 truncate">
+                      <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5 flex-wrap">
                         <span>{user.email}</span>
                         {user.kelas && (
                           <>
@@ -230,6 +326,24 @@ export default function OnlineUsersModal({ isOpen, onClose, currentUserId }: Onl
                           </>
                         )}
                       </div>
+
+                      {/* Display Instansi and Guru Pembimbing info chips */}
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        {user.nama_instansi && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-purple-50 text-purple-700 text-[10px] font-bold border border-purple-200">
+                            <Building2 className="w-3 h-3 text-purple-600" />
+                            <span className="truncate max-w-[180px]">{user.nama_instansi}</span>
+                          </span>
+                        )}
+
+                        {user.nama_guru_pembimbing && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
+                            <UserCheck className="w-3 h-3 text-emerald-600" />
+                            <span className="truncate max-w-[180px]">Guru: {user.nama_guru_pembimbing}</span>
+                          </span>
+                        )}
+                      </div>
+
                     </div>
                   </div>
 
@@ -274,3 +388,4 @@ export default function OnlineUsersModal({ isOpen, onClose, currentUserId }: Onl
     </div>
   );
 }
+
