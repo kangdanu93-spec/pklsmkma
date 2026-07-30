@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { PklUser } from '../types';
 import { Lock, Mail, ArrowRight, GraduationCap, ShieldAlert, Shield } from 'lucide-react';
 import { getSupabaseClient, getSupabaseNoSessionClient, isSupabaseConnected } from '../supabaseClient';
-import { dbSaveUser, dbGetUsers } from '../utils/localDb';
+import { dbSaveUser, dbGetUsers, localDb } from '../utils/localDb';
 
 interface LoginProps {
   users: PklUser[];
@@ -42,6 +42,7 @@ export const Login: React.FC<LoginProps> = ({
     try {
       const inputVal = email.trim().toLowerCase();
       const inputDigits = inputVal.replace(/[^0-9]/g, '');
+      const sbClient = getSupabaseClient();
 
       // Helper function to match user by email, id, nomor_induk, or digits
       const matchUser = (u: PklUser) => {
@@ -55,12 +56,16 @@ export const Login: React.FC<LoginProps> = ({
         // 1. Exact match on email, id, or nomor_induk
         if (uEmail === inputVal || uId === inputVal || uNomorInduk === inputVal) return true;
 
-        // 2. Match without NISN/NIP prefix (e.g., input "0084038428" matching stored "NISN0084038428" or vice-versa)
+        // 2. Match email prefix (e.g. input "0084038428" matches "0084038428@siswa.simpkl.com")
+        const uEmailPrefix = uEmail.split('@')[0];
+        if (uEmailPrefix && uEmailPrefix === inputVal) return true;
+
+        // 3. Match without NISN/NIP prefix (e.g., input "0084038428" matching stored "NISN0084038428" or vice-versa)
         const uNomorClean = uNomorInduk.replace(/^(nisn|nip|nik)\s*/i, '');
         const inputClean = inputVal.replace(/^(nisn|nip|nik)\s*/i, '');
         if (uNomorClean && inputClean && uNomorClean === inputClean) return true;
 
-        // 3. Match pure digits (if input has at least 4 digits)
+        // 4. Match pure digits (if input has at least 4 digits)
         if (inputDigits.length >= 4) {
           if (uNomorIndukDigits && uNomorIndukDigits === inputDigits) return true;
           if (uTeleponDigits && uTeleponDigits === inputDigits) return true;
@@ -97,8 +102,58 @@ export const Login: React.FC<LoginProps> = ({
         } catch (e) {}
       }
 
+      // 4. Direct targeted search query in Supabase table pkl_users
+      if (!matchedUser && sbClient) {
+        try {
+          const rawInput = email.trim();
+          const inputLower = rawInput.toLowerCase();
+          const digitsOnly = inputLower.replace(/[^0-9]/g, '');
+
+          const conditions = [
+            `nomor_induk.eq.${rawInput}`,
+            `nomor_induk.eq.${inputLower}`,
+            `email.eq.${inputLower}`,
+            `id.eq.${inputLower}`
+          ];
+
+          if (digitsOnly) {
+            conditions.push(`nomor_induk.eq.${digitsOnly}`);
+            conditions.push(`nomor_induk.eq.NISN${digitsOnly}`);
+            conditions.push(`email.eq.${digitsOnly}@siswa.simpkl.com`);
+            conditions.push(`id.eq.${digitsOnly}@siswa.simpkl.com`);
+          }
+
+          const { data: directUsers, error: sbSearchErr } = await sbClient
+            .from('pkl_users')
+            .select('*')
+            .or(conditions.join(','));
+
+          if (!sbSearchErr && directUsers && directUsers.length > 0) {
+            matchedUser = directUsers[0];
+          } else if (digitsOnly) {
+            const { data: ilikeUsers } = await sbClient
+              .from('pkl_users')
+              .select('*')
+              .or(`nomor_induk.ilike.%${digitsOnly}%,email.ilike.%${digitsOnly}%`)
+              .limit(1);
+            if (ilikeUsers && ilikeUsers.length > 0) {
+              matchedUser = ilikeUsers[0];
+            }
+          }
+        } catch (err) {
+          console.warn('Direct Supabase query for user failed:', err);
+        }
+      }
+
       // Check matched user in local/cloud database records
       if (matchedUser) {
+        // Persist matched user to local storage immediately so local cache stays fresh
+        try {
+          const existingLocal = localDb.get<PklUser>('SIM_PKL_USERS');
+          if (!existingLocal.some(u => u.id === matchedUser!.id)) {
+            localDb.set('SIM_PKL_USERS', [...existingLocal, matchedUser]);
+          }
+        } catch (e) {}
         const storedPassword = (matchedUser.password || '').trim() || 'password123';
         const isSecuredByAuth = storedPassword === '[SECURED BY SUPABASE AUTH]';
         const typedPassword = password.trim();
@@ -122,16 +177,15 @@ export const Login: React.FC<LoginProps> = ({
           setIsAuthenticating(false);
 
           // Non-blocking background sync with Supabase Auth if plain text password was used
-          const sb = getSupabaseClient();
-          if (sb && !isSecuredByAuth) {
+          if (sbClient && !isSecuredByAuth) {
             const loginEmail = matchedUser.email;
-            sb.auth.signInWithPassword({ email: loginEmail, password: typedPassword }).then(({ data, error }) => {
+            sbClient.auth.signInWithPassword({ email: loginEmail, password: typedPassword }).then(({ data, error }) => {
               if (error) {
                 const noSessionSb = getSupabaseNoSessionClient();
                 if (noSessionSb) {
                   noSessionSb.auth.signUp({ email: loginEmail, password: typedPassword }).then(({ data: suData, error: suErr }) => {
                     if (!suErr && suData?.user) {
-                      sb.auth.signInWithPassword({ email: loginEmail, password: typedPassword });
+                      sbClient.auth.signInWithPassword({ email: loginEmail, password: typedPassword });
                       dbSaveUser({ ...matchedUser, password: '[SECURED BY SUPABASE AUTH]' });
                     }
                   }).catch(() => {});
@@ -145,13 +199,12 @@ export const Login: React.FC<LoginProps> = ({
         }
 
         // If not a direct/default match, authenticate with Supabase Auth using matchedUser's email
-        const sb = getSupabaseClient();
-        if (sb) {
+        if (sbClient) {
           try {
             const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
               setTimeout(() => resolve({ data: null, error: new Error('Timeout') }), 3000)
             );
-            const loginPromise = sb.auth.signInWithPassword({
+            const loginPromise = sbClient.auth.signInWithPassword({
               email: matchedUser.email,
               password: typedPassword,
             });
@@ -177,12 +230,11 @@ export const Login: React.FC<LoginProps> = ({
       }
 
       // If user not found in local or cloud user list, try Supabase Auth with fallback
-      const sb = getSupabaseClient();
-      if (sb) {
+      if (sbClient) {
         const timeoutPromise = new Promise<{ data: any, error: any }>((resolve) => 
           setTimeout(() => resolve({ data: null, error: new Error('Timeout') }), 2000)
         );
-        const loginPromise = sb.auth.signInWithPassword({ email: inputVal, password });
+        const loginPromise = sbClient.auth.signInWithPassword({ email: inputVal, password });
         const { data, error: authError } = await Promise.race([loginPromise, timeoutPromise]);
 
         if (!authError && data?.user) {
