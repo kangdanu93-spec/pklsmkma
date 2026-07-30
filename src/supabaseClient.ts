@@ -35,11 +35,11 @@ export function saveSupabaseConfig(url: string, anonKey: string) {
     localStorage.setItem('SIM_PKL_SUPABASE_ANON_KEY', anonKey.trim());
   }
 
-  // Persist to the full-stack server so other browsers can sync automatically on load
+  // Persist to the full-stack server so other browsers and devices sync automatically on load
   fetch('/api/save-supabase-config', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url: url.trim(), anonKey: anonKey.trim() })
+    body: JSON.stringify({ url: (url || '').trim(), anonKey: (anonKey || '').trim() })
   }).catch(err => console.error('Failed to save Supabase config to server:', err));
 }
 
@@ -47,6 +47,15 @@ export async function syncSupabaseConfigFromServer(): Promise<boolean> {
   try {
     const localUrl = localStorage.getItem('SIM_PKL_SUPABASE_URL');
     const localKey = localStorage.getItem('SIM_PKL_SUPABASE_ANON_KEY');
+
+    // If local credentials exist, aggressively push to server in background so other devices get it
+    if (localUrl && localKey) {
+      fetch('/api/save-supabase-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: localUrl.trim(), anonKey: localKey.trim() })
+      }).catch(() => {});
+    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2000);
@@ -63,15 +72,6 @@ export async function syncSupabaseConfigFromServer(): Promise<boolean> {
           supabaseInstance = null; // Reset instance to force re-creation
           return true; // Config was updated
         }
-      } else if (localUrl && localKey) {
-        // Server config is empty, but local config is populated.
-        // Self-heal: Upload local config to server asynchronously without blocking.
-        console.log('Server config is empty. Uploading local Supabase config to server...');
-        fetch('/api/save-supabase-config', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: localUrl.trim(), anonKey: localKey.trim() })
-        }).catch(() => {});
       }
     }
   } catch (err) {

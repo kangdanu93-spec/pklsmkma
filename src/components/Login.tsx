@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { PklUser } from '../types';
 import { Lock, Mail, ArrowRight, GraduationCap, ShieldAlert, Shield } from 'lucide-react';
-import { getSupabaseClient, getSupabaseNoSessionClient, isSupabaseConnected } from '../supabaseClient';
+import { getSupabaseClient, getSupabaseNoSessionClient, isSupabaseConnected, syncSupabaseConfigFromServer } from '../supabaseClient';
 import { dbSaveUser, dbGetUsers, localDb } from '../utils/localDb';
 
 interface LoginProps {
@@ -40,6 +40,9 @@ export const Login: React.FC<LoginProps> = ({
     setIsAuthenticating(true);
 
     try {
+      // 0. Auto-sync Supabase config from server first so other devices/phones connect seamlessly
+      await syncSupabaseConfigFromServer();
+
       const inputVal = email.trim().toLowerCase();
       const inputDigits = inputVal.replace(/[^0-9]/g, '');
       const sbClient = getSupabaseClient();
@@ -102,43 +105,34 @@ export const Login: React.FC<LoginProps> = ({
         } catch (e) {}
       }
 
-      // 4. Direct targeted search query in Supabase table pkl_users
+      // 4. Direct targeted search queries in Supabase table pkl_users
       if (!matchedUser && sbClient) {
         try {
           const rawInput = email.trim();
           const inputLower = rawInput.toLowerCase();
           const digitsOnly = inputLower.replace(/[^0-9]/g, '');
 
-          const conditions = [
-            `nomor_induk.eq.${rawInput}`,
-            `nomor_induk.eq.${inputLower}`,
-            `email.eq.${inputLower}`,
-            `id.eq.${inputLower}`
-          ];
+          // Try exact column matches directly via Supabase API
+          const { data: byNomor } = await sbClient.from('pkl_users').select('*').eq('nomor_induk', rawInput);
+          if (byNomor && byNomor.length > 0) matchedUser = byNomor[0];
 
-          if (digitsOnly) {
-            conditions.push(`nomor_induk.eq.${digitsOnly}`);
-            conditions.push(`nomor_induk.eq.NISN${digitsOnly}`);
-            conditions.push(`email.eq.${digitsOnly}@siswa.simpkl.com`);
-            conditions.push(`id.eq.${digitsOnly}@siswa.simpkl.com`);
+          if (!matchedUser && digitsOnly) {
+            const { data: byDigits } = await sbClient.from('pkl_users').select('*').eq('nomor_induk', digitsOnly);
+            if (byDigits && byDigits.length > 0) matchedUser = byDigits[0];
           }
 
-          const { data: directUsers, error: sbSearchErr } = await sbClient
-            .from('pkl_users')
-            .select('*')
-            .or(conditions.join(','));
+          if (!matchedUser) {
+            const { data: byEmail } = await sbClient.from('pkl_users').select('*').eq('email', inputLower);
+            if (byEmail && byEmail.length > 0) matchedUser = byEmail[0];
+          }
 
-          if (!sbSearchErr && directUsers && directUsers.length > 0) {
-            matchedUser = directUsers[0];
-          } else if (digitsOnly) {
-            const { data: ilikeUsers } = await sbClient
+          if (!matchedUser && digitsOnly) {
+            const { data: byIlike } = await sbClient
               .from('pkl_users')
               .select('*')
               .or(`nomor_induk.ilike.%${digitsOnly}%,email.ilike.%${digitsOnly}%`)
               .limit(1);
-            if (ilikeUsers && ilikeUsers.length > 0) {
-              matchedUser = ilikeUsers[0];
-            }
+            if (byIlike && byIlike.length > 0) matchedUser = byIlike[0];
           }
         } catch (err) {
           console.warn('Direct Supabase query for user failed:', err);
