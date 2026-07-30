@@ -126,6 +126,11 @@ export const Login: React.FC<LoginProps> = ({
             if (byEmail && byEmail.length > 0) matchedUser = byEmail[0];
           }
 
+          if (!matchedUser) {
+            const { data: byNama } = await sbClient.from('pkl_users').select('*').ilike('nama', `%${rawInput}%`).limit(1);
+            if (byNama && byNama.length > 0) matchedUser = byNama[0];
+          }
+
           if (!matchedUser && digitsOnly) {
             const { data: byIlike } = await sbClient
               .from('pkl_users')

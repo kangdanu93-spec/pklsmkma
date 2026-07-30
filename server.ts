@@ -10,10 +10,13 @@ app.use(express.json());
 
 const CONFIG_FILE = path.join(process.cwd(), "supabase-config.json");
 
+const DEFAULT_SUPABASE_URL = "https://eppbwhvtezpcbukcshxu.supabase.co";
+const DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVwcGJ3aHZ0ZXpwY2J1a2NzaHh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NzU2ODUsImV4cCI6MjA5ODM1MTY4NX0.hn5S8wnseARTq3s6ozP4HbUtLwLtLmd0-s6fLwo-ML0";
+
 // Helper to get config
 function getSupabaseServerConfig() {
-  let url = process.env.VITE_SUPABASE_URL || "";
-  let anonKey = process.env.VITE_SUPABASE_ANON_KEY || "";
+  let url = process.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+  let anonKey = process.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
 
   if (fs.existsSync(CONFIG_FILE)) {
     try {

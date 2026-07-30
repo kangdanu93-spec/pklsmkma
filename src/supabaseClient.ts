@@ -6,6 +6,9 @@ export interface SupabaseConfig {
   anonKey: string;
 }
 
+const DEFAULT_SUPABASE_URL = 'https://eppbwhvtezpcbukcshxu.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVwcGJ3aHZ0ZXpwY2J1a2NzaHh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NzU2ODUsImV4cCI6MjA5ODM1MTY4NX0.hn5S8wnseARTq3s6ozP4HbUtLwLtLmd0-s6fLwo-ML0';
+
 export function getSupabaseConfig(): SupabaseConfig | null {
   // Check localStorage first (user-entered in UI)
   const localUrl = localStorage.getItem('SIM_PKL_SUPABASE_URL');
@@ -23,7 +26,8 @@ export function getSupabaseConfig(): SupabaseConfig | null {
     return { url: envUrl, anonKey: envKey };
   }
 
-  return null;
+  // Universal fallback to active cloud database for seamless cross-device login
+  return { url: DEFAULT_SUPABASE_URL, anonKey: DEFAULT_SUPABASE_ANON_KEY };
 }
 
 export function saveSupabaseConfig(url: string, anonKey: string) {
