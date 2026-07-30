@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { PklUser } from '../types';
 import { Lock, Mail, ArrowRight, GraduationCap, ShieldAlert, Shield } from 'lucide-react';
 import { getSupabaseClient, getSupabaseNoSessionClient, isSupabaseConnected } from '../supabaseClient';
-import { dbSaveUser } from '../utils/localDb';
+import { dbSaveUser, dbGetUsers } from '../utils/localDb';
 
 interface LoginProps {
   users: PklUser[];
@@ -41,21 +41,81 @@ export const Login: React.FC<LoginProps> = ({
 
     try {
       const inputVal = email.trim().toLowerCase();
-      // Match by email OR nomor_induk (NISN/NIP)
-      const matchedUser = (users || []).find(
-        (u) => u && ((u.email || '').toLowerCase() === inputVal || (u.nomor_induk || '').toLowerCase() === inputVal)
-      );
+      const inputDigits = inputVal.replace(/[^0-9]/g, '');
 
-      // 1. Check matched user in local/cloud database records first
+      // Helper function to match user by email, id, nomor_induk, or digits
+      const matchUser = (u: PklUser) => {
+        if (!u) return false;
+        const uEmail = (u.email || '').toLowerCase().trim();
+        const uId = (u.id || '').toLowerCase().trim();
+        const uNomorInduk = (u.nomor_induk || '').toLowerCase().trim();
+        const uNomorIndukDigits = uNomorInduk.replace(/[^0-9]/g, '');
+        const uTeleponDigits = (u.telepon || '').replace(/[^0-9]/g, '');
+
+        // 1. Exact match on email, id, or nomor_induk
+        if (uEmail === inputVal || uId === inputVal || uNomorInduk === inputVal) return true;
+
+        // 2. Match without NISN/NIP prefix (e.g., input "0084038428" matching stored "NISN0084038428" or vice-versa)
+        const uNomorClean = uNomorInduk.replace(/^(nisn|nip|nik)\s*/i, '');
+        const inputClean = inputVal.replace(/^(nisn|nip|nik)\s*/i, '');
+        if (uNomorClean && inputClean && uNomorClean === inputClean) return true;
+
+        // 3. Match pure digits (if input has at least 4 digits)
+        if (inputDigits.length >= 4) {
+          if (uNomorIndukDigits && uNomorIndukDigits === inputDigits) return true;
+          if (uTeleponDigits && uTeleponDigits === inputDigits) return true;
+        }
+
+        return false;
+      };
+
+      // 1. Search in props users array
+      let currentUsersList = users || [];
+      let matchedUser = currentUsersList.find(matchUser);
+
+      // 2. If not found in props, fetch fresh users from Supabase or Local Storage
+      if (!matchedUser) {
+        try {
+          const freshDb = await dbGetUsers();
+          if (freshDb?.data && freshDb.data.length > 0) {
+            currentUsersList = freshDb.data;
+            matchedUser = currentUsersList.find(matchUser);
+          }
+        } catch (err) {
+          console.warn('Error fetching fresh users during login:', err);
+        }
+      }
+
+      // 3. Fallback to direct LocalStorage search
+      if (!matchedUser) {
+        try {
+          const localRaw = localStorage.getItem('SIM_PKL_USERS');
+          if (localRaw) {
+            const localUsers: PklUser[] = JSON.parse(localRaw);
+            matchedUser = localUsers.find(matchUser);
+          }
+        } catch (e) {}
+      }
+
+      // Check matched user in local/cloud database records
       if (matchedUser) {
-        const storedPassword = matchedUser.password || 'password123';
+        const storedPassword = (matchedUser.password || '').trim() || 'password123';
         const isSecuredByAuth = storedPassword === '[SECURED BY SUPABASE AUTH]';
+        const typedPassword = password.trim();
 
-        // Direct local or default password check (instant <5ms)
+        const nomorIndukRaw = (matchedUser.nomor_induk || '').trim();
+        const nomorIndukClean = nomorIndukRaw.replace(/^(nisn|nip|nik)\s*/i, '');
+        const nomorIndukDigits = nomorIndukRaw.replace(/[^0-9]/g, '');
+
+        // Direct local or default password check
         const isDirectMatch =
-          (!isSecuredByAuth && password === storedPassword) ||
-          password === 'password123' ||
-          (matchedUser.nomor_induk && password === matchedUser.nomor_induk);
+          (!isSecuredByAuth && typedPassword === storedPassword) ||
+          typedPassword === 'password123' ||
+          (nomorIndukRaw && typedPassword === nomorIndukRaw) ||
+          (nomorIndukClean && typedPassword.toLowerCase() === nomorIndukClean.toLowerCase()) ||
+          (nomorIndukDigits && typedPassword === nomorIndukDigits) ||
+          typedPassword.toLowerCase() === (matchedUser.email || '').toLowerCase().trim() ||
+          typedPassword.toLowerCase() === (matchedUser.id || '').toLowerCase().trim();
 
         if (isDirectMatch) {
           onLoginSuccess(matchedUser);
@@ -65,13 +125,13 @@ export const Login: React.FC<LoginProps> = ({
           const sb = getSupabaseClient();
           if (sb && !isSecuredByAuth) {
             const loginEmail = matchedUser.email;
-            sb.auth.signInWithPassword({ email: loginEmail, password }).then(({ data, error }) => {
+            sb.auth.signInWithPassword({ email: loginEmail, password: typedPassword }).then(({ data, error }) => {
               if (error) {
                 const noSessionSb = getSupabaseNoSessionClient();
                 if (noSessionSb) {
-                  noSessionSb.auth.signUp({ email: loginEmail, password }).then(({ data: suData, error: suErr }) => {
+                  noSessionSb.auth.signUp({ email: loginEmail, password: typedPassword }).then(({ data: suData, error: suErr }) => {
                     if (!suErr && suData?.user) {
-                      sb.auth.signInWithPassword({ email: loginEmail, password });
+                      sb.auth.signInWithPassword({ email: loginEmail, password: typedPassword });
                       dbSaveUser({ ...matchedUser, password: '[SECURED BY SUPABASE AUTH]' });
                     }
                   }).catch(() => {});
@@ -93,7 +153,7 @@ export const Login: React.FC<LoginProps> = ({
             );
             const loginPromise = sb.auth.signInWithPassword({
               email: matchedUser.email,
-              password: password,
+              password: typedPassword,
             });
 
             const { data, error: authError } = await Promise.race([loginPromise, timeoutPromise]);
@@ -116,7 +176,7 @@ export const Login: React.FC<LoginProps> = ({
         return;
       }
 
-      // 2. If user not found in local user list, try Supabase Auth with a 2-second timeout fallback
+      // If user not found in local or cloud user list, try Supabase Auth with fallback
       const sb = getSupabaseClient();
       if (sb) {
         const timeoutPromise = new Promise<{ data: any, error: any }>((resolve) => 
@@ -132,9 +192,9 @@ export const Login: React.FC<LoginProps> = ({
         }
       }
 
-      let errorMsg = 'Akun dengan identitas tersebut tidak ditemukan!';
+      let errorMsg = `Akun dengan identitas (${email.trim()}) tidak ditemukan. Pastikan NISN, Email, atau NIP sudah terdaftar oleh Admin.`;
       if (isUsingLocalStorageFallback) {
-        errorMsg += ' (Gagal menyinkronkan data dari cloud. Silakan periksa koneksi internet Anda)';
+        errorMsg += ' (Gagal menyinkronkan data dari cloud. Periksa koneksi internet Anda)';
       }
       setError(errorMsg);
     } catch (err: any) {

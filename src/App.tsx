@@ -337,14 +337,26 @@ export default function App() {
     }
   };
 
-  const handleUserSessionSwitch = (userId: string) => {
-    const selected = users.find(u => u.id === userId);
+  const handleUserSessionSwitch = (userOrId: PklUser | string) => {
+    let selected: PklUser | undefined;
+    if (typeof userOrId === 'object' && userOrId !== null) {
+      selected = userOrId;
+    } else {
+      selected = users.find(u => u.id === userOrId) || localDb.get<PklUser>('SIM_PKL_USERS').find(u => u.id === userOrId);
+    }
+
     if (selected) {
       setCurrentUser(selected);
       localStorage.setItem('SIM_PKL_LOGGED_IN_USER_ID', selected.id);
       localStorage.setItem('SIM_PKL_ACTIVE_SESSION', JSON.stringify(selected));
       localStorage.setItem('SIM_PKL_LAST_ACTIVITY', Date.now().toString());
       setSessionExpiredNotice(false);
+
+      // Ensure user exists in state
+      setUsers(prev => {
+        const exists = prev.some(u => u.id === selected!.id);
+        return exists ? prev.map(u => u.id === selected!.id ? selected! : u) : [...prev, selected!];
+      });
     } else {
       setCurrentUser(null);
       localStorage.removeItem('SIM_PKL_LOGGED_IN_USER_ID');
@@ -523,7 +535,7 @@ export default function App() {
         {!currentUser ? (
           <Login 
             users={users} 
-            onLoginSuccess={(u) => handleUserSessionSwitch(u.id)}
+            onLoginSuccess={(u) => handleUserSessionSwitch(u)}
             isDbConnected={isDbConnected}
             isUsingLocalStorageFallback={isUsingLocalStorageFallback}
             sbDetails={sbDetails}
