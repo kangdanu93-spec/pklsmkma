@@ -129,6 +129,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
   const [kopLogo, setKopLogo] = useState(() => localStorage.getItem('kop_logo') || '');
   const [isKopModalOpen, setIsKopModalOpen] = useState(false);
   const [isSavingKop, setIsSavingKop] = useState(false);
+  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [expandedPhotoUrl, setExpandedPhotoUrl] = useState<string | null>(null);
 
   // Active sub-tab state ('overview' | 'placements' | 'students' | 'teachers' | 'users' | 'companies' | 'reports' | 'classes' | 'permissions' | 'announcements')
@@ -1060,6 +1061,230 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
     downloadAnchor.remove();
   };
 
+  // ---------------- DOWNLOAD MASTER DATA HANDLERS ----------------
+  const handleDownloadMasterSiswa = () => {
+    const studentsOnly = users.filter(u => u.role === 'siswa');
+    const dataToExport = studentsOnly.map((s, idx) => {
+      const placement = placements.find(p => p.id_siswa === s.id && p.status === 'disetujui');
+      const company = placement ? instansiList.find(i => i.id === placement.id_instansi) : null;
+      const teacher = s.id_pembimbing ? users.find(u => u.id === s.id_pembimbing) : null;
+
+      return {
+        'No': idx + 1,
+        'NISN': s.nomor_induk || '-',
+        'Nama Lengkap': s.nama,
+        'Kelas': s.kelas || '-',
+        'Jurusan': s.jurusan || '-',
+        'Telepon': s.telepon || '-',
+        'Email Login': s.email,
+        'Password Login': s.password || 'password123',
+        'Instansi PKL': company?.nama_instansi || 'Belum Penempatan',
+        'Guru Pembimbing': teacher?.nama || 'Belum Diplot'
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    worksheet['!cols'] = [
+      { wch: 6 },  // No
+      { wch: 16 }, // NISN
+      { wch: 28 }, // Nama
+      { wch: 14 }, // Kelas
+      { wch: 24 }, // Jurusan
+      { wch: 16 }, // Telepon
+      { wch: 28 }, // Email
+      { wch: 16 }, // Password
+      { wch: 30 }, // Instansi
+      { wch: 28 }  // Guru
+    ];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Master Siswa');
+    XLSX.writeFile(workbook, `Master_Data_Siswa_PKL_${new Date().getFullYear()}.xlsx`);
+  };
+
+  const handleDownloadMasterGuru = () => {
+    const teachersOnly = users.filter(u => u.role === 'guru');
+    const dataToExport = teachersOnly.map((g, idx) => {
+      const countBimbingan = users.filter(u => u.role === 'siswa' && u.id_pembimbing === g.id).length;
+      return {
+        'No': idx + 1,
+        'NIP / NIK': g.nomor_induk || '-',
+        'Nama Guru Pembimbing': g.nama,
+        'Telepon': g.telepon || '-',
+        'Email Login': g.email,
+        'Password Login': g.password || 'password123',
+        'Jumlah Siswa Bimbingan': countBimbingan
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    worksheet['!cols'] = [
+      { wch: 6 },  // No
+      { wch: 20 }, // NIP
+      { wch: 30 }, // Nama
+      { wch: 18 }, // Telepon
+      { wch: 28 }, // Email
+      { wch: 16 }, // Password
+      { wch: 22 }  // Bimbingan
+    ];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Guru Pembimbing');
+    XLSX.writeFile(workbook, `Master_Data_Guru_Pembimbing_${new Date().getFullYear()}.xlsx`);
+  };
+
+  const handleDownloadMasterInstansi = () => {
+    const dataToExport = instansiList.map((inst, idx) => {
+      const countSiswa = users.filter(u => u.role === 'siswa' && u.id_instansi === inst.id).length;
+      return {
+        'No': idx + 1,
+        'Nama Instansi / Perusahaan': inst.nama_instansi,
+        'Alamat Lengkap': inst.alamat,
+        'Kuota Siswa': inst.kuota,
+        'Jumlah Siswa Terisi': countSiswa,
+        'Sisa Kuota': Math.max(0, inst.kuota - countSiswa),
+        'Nama Pembimbing Instansi': inst.pembimbing_nama || '-',
+        'No. Telp Pembimbing Instansi': inst.pembimbing_telp || '-'
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    worksheet['!cols'] = [
+      { wch: 6 },  // No
+      { wch: 32 }, // Nama
+      { wch: 45 }, // Alamat
+      { wch: 12 }, // Kuota
+      { wch: 18 }, // Terisi
+      { wch: 12 }, // Sisa
+      { wch: 26 }, // Pembimbing
+      { wch: 20 }  // Telp
+    ];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Master Instansi PKL');
+    XLSX.writeFile(workbook, `Master_Data_Instansi_PKL_${new Date().getFullYear()}.xlsx`);
+  };
+
+  const handleDownloadMasterAkun = () => {
+    const dataToExport = users.map((u, idx) => {
+      const placement = placements.find(p => p.id_siswa === u.id && p.status === 'disetujui');
+      const company = placement ? instansiList.find(i => i.id === placement.id_instansi) : null;
+
+      return {
+        'No': idx + 1,
+        'Email Login': u.email,
+        'Nama Lengkap': u.nama,
+        'Role Akun': u.role.toUpperCase(),
+        'Nomor Induk (NISN/NIP)': u.nomor_induk || '-',
+        'No. Telepon': u.telepon || '-',
+        'Password Login': u.password || 'password123',
+        'Kelas': u.kelas || '-',
+        'Jurusan': u.jurusan || '-',
+        'Instansi Mitra': company?.nama_instansi || '-'
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    worksheet['!cols'] = [
+      { wch: 6 },  // No
+      { wch: 28 }, // Email
+      { wch: 28 }, // Nama
+      { wch: 12 }, // Role
+      { wch: 20 }, // Nomor Induk
+      { wch: 16 }, // Telepon
+      { wch: 16 }, // Password
+      { wch: 14 }, // Kelas
+      { wch: 24 }, // Jurusan
+      { wch: 28 }  // Instansi
+    ];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Master Akun Login');
+    XLSX.writeFile(workbook, `Master_Data_Akun_Login_${new Date().getFullYear()}.xlsx`);
+  };
+
+  const handleDownloadAllMasterData = () => {
+    const workbook = XLSX.utils.book_new();
+
+    // 1. Siswa
+    const studentsOnly = users.filter(u => u.role === 'siswa');
+    const studentData = studentsOnly.map((s, idx) => {
+      const placement = placements.find(p => p.id_siswa === s.id && p.status === 'disetujui');
+      const company = placement ? instansiList.find(i => i.id === placement.id_instansi) : null;
+      const teacher = s.id_pembimbing ? users.find(u => u.id === s.id_pembimbing) : null;
+      return {
+        'No': idx + 1,
+        'NISN': s.nomor_induk || '-',
+        'Nama Lengkap': s.nama,
+        'Kelas': s.kelas || '-',
+        'Jurusan': s.jurusan || '-',
+        'Telepon': s.telepon || '-',
+        'Email Login': s.email,
+        'Password Login': s.password || 'password123',
+        'Instansi PKL': company?.nama_instansi || 'Belum Penempatan',
+        'Guru Pembimbing': teacher?.nama || 'Belum Diplot'
+      };
+    });
+    const wsStudents = XLSX.utils.json_to_sheet(studentData);
+    wsStudents['!cols'] = [{ wch: 6 }, { wch: 16 }, { wch: 28 }, { wch: 14 }, { wch: 24 }, { wch: 16 }, { wch: 28 }, { wch: 16 }, { wch: 30 }, { wch: 28 }];
+    XLSX.utils.book_append_sheet(workbook, wsStudents, 'Master Siswa');
+
+    // 2. Guru
+    const teachersOnly = users.filter(u => u.role === 'guru');
+    const teacherData = teachersOnly.map((g, idx) => {
+      const countBimbingan = users.filter(u => u.role === 'siswa' && u.id_pembimbing === g.id).length;
+      return {
+        'No': idx + 1,
+        'NIP / NIK': g.nomor_induk || '-',
+        'Nama Guru Pembimbing': g.nama,
+        'Telepon': g.telepon || '-',
+        'Email Login': g.email,
+        'Password Login': g.password || 'password123',
+        'Jumlah Siswa Bimbingan': countBimbingan
+      };
+    });
+    const wsTeachers = XLSX.utils.json_to_sheet(teacherData);
+    wsTeachers['!cols'] = [{ wch: 6 }, { wch: 20 }, { wch: 30 }, { wch: 18 }, { wch: 28 }, { wch: 16 }, { wch: 22 }];
+    XLSX.utils.book_append_sheet(workbook, wsTeachers, 'Guru Pembimbing');
+
+    // 3. Instansi
+    const companyData = instansiList.map((inst, idx) => {
+      const countSiswa = users.filter(u => u.role === 'siswa' && u.id_instansi === inst.id).length;
+      return {
+        'No': idx + 1,
+        'Nama Instansi / Perusahaan': inst.nama_instansi,
+        'Alamat Lengkap': inst.alamat,
+        'Kuota Siswa': inst.kuota,
+        'Jumlah Siswa Terisi': countSiswa,
+        'Sisa Kuota': Math.max(0, inst.kuota - countSiswa),
+        'Nama Pembimbing Instansi': inst.pembimbing_nama || '-',
+        'No. Telp Pembimbing Instansi': inst.pembimbing_telp || '-'
+      };
+    });
+    const wsCompanies = XLSX.utils.json_to_sheet(companyData);
+    wsCompanies['!cols'] = [{ wch: 6 }, { wch: 32 }, { wch: 45 }, { wch: 12 }, { wch: 18 }, { wch: 12 }, { wch: 26 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(workbook, wsCompanies, 'Instansi PKL');
+
+    // 4. Akun Login
+    const accountData = users.map((u, idx) => {
+      const placement = placements.find(p => p.id_siswa === u.id && p.status === 'disetujui');
+      const company = placement ? instansiList.find(i => i.id === placement.id_instansi) : null;
+      return {
+        'No': idx + 1,
+        'Email Login': u.email,
+        'Nama Lengkap': u.nama,
+        'Role Akun': u.role.toUpperCase(),
+        'Nomor Induk (NISN/NIP)': u.nomor_induk || '-',
+        'No. Telepon': u.telepon || '-',
+        'Password Login': u.password || 'password123',
+        'Kelas': u.kelas || '-',
+        'Jurusan': u.jurusan || '-',
+        'Instansi Mitra': company?.nama_instansi || '-'
+      };
+    });
+    const wsAccounts = XLSX.utils.json_to_sheet(accountData);
+    wsAccounts['!cols'] = [{ wch: 6 }, { wch: 28 }, { wch: 28 }, { wch: 12 }, { wch: 20 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 24 }, { wch: 28 }];
+    XLSX.utils.book_append_sheet(workbook, wsAccounts, 'Akun Login');
+
+    XLSX.writeFile(workbook, `Master_Data_Lengkap_SIMPKL_${new Date().getFullYear()}.xlsx`);
+  };
+
   const compileStudentAttendanceReport = () => {
     const reportMap = new Map<string, any>();
 
@@ -1738,6 +1963,14 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                         <span className="truncate">Kelola Akun Login</span>
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => setIsDownloadModalOpen(true)}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-xl transition-all text-indigo-700 bg-indigo-50/80 hover:bg-indigo-100 font-bold cursor-pointer mt-1 border border-indigo-100/80 shadow-2xs"
+                    >
+                      <Download className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                      <span className="truncate">Unduh Master Data</span>
+                    </button>
                   </div>
                 )}
               </div>
@@ -2999,7 +3232,14 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                     <p className="text-xs text-slate-400">Daftar lengkap seluruh siswa peserta PKL beserta Kelas dan Kompetensi Keahlian (Jurusan).</p>
                   </div>
                   {/* Search and Filters */}
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <button
+                      type="button"
+                      onClick={handleDownloadMasterSiswa}
+                      className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer shrink-0"
+                    >
+                      <Download className="w-3.5 h-3.5" /> Unduh Master Siswa (Excel)
+                    </button>
                     {/* Search Input */}
                     <div className="relative">
                       <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
@@ -3370,6 +3610,14 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
+                    type="button"
+                    onClick={handleDownloadMasterGuru}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold text-xs flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    Unduh Master Guru (Excel)
+                  </button>
+                  <button
                     onClick={handleDownloadTeacherTemplate}
                     className="px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl border border-slate-200/60 font-semibold text-xs flex items-center gap-1.5 transition-all shadow-sm"
                   >
@@ -3687,6 +3935,14 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                 
                 {/* Search & Filter Controls */}
                 <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleDownloadMasterAkun}
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Unduh Master Akun (Excel)
+                  </button>
+
                   <div className="relative">
                     <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
                     <input
@@ -3978,16 +4234,25 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                   <h3 className="text-base font-bold text-slate-800">Daftar Mitra Instansi & Perusahaan</h3>
                   <p className="text-xs text-slate-400">Daftar lengkap mitra industri, alamat lokasi magang, kuota, serta kontak pembimbing industri.</p>
                 </div>
-                {/* Search Bar */}
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                  <input
-                    type="text"
-                    placeholder="Cari instansi, alamat..."
-                    className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-800 w-48 sm:w-64 shadow-sm"
-                    onChange={(e) => { setCompaniesSearch(e.target.value); setCompaniesPage(1); }}
-                    value={companiesSearch}
-                  />
+                {/* Search & Actions Bar */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleDownloadMasterInstansi}
+                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Unduh Master Instansi (Excel)
+                  </button>
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      placeholder="Cari instansi, alamat..."
+                      className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-slate-800 w-48 sm:w-64 shadow-sm"
+                      onChange={(e) => { setCompaniesSearch(e.target.value); setCompaniesPage(1); }}
+                      value={companiesSearch}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -5746,6 +6011,144 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
               <p className="font-semibold mb-16 text-black">Hubungan Industri (Hubin)</p>
               <p className="font-bold underline text-black">( Danu Wijaya, S.Kom )</p>
               <p className="text-slate-600">NIP. 198512122010011002</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Pusat Unduh Master Data */}
+      {isDownloadModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[1000] flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden border border-slate-100 space-y-0">
+            <div className="p-5 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/10 rounded-xl">
+                  <Download className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">Pusat Unduh Data Master</h3>
+                  <p className="text-[11px] text-indigo-100">Ekspor data master sekolah ke format Microsoft Excel (.xlsx)</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsDownloadModalOpen(false)}
+                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3 bg-slate-50/50 max-h-[80vh] overflow-y-auto">
+              {/* Package All Button */}
+              <div className="p-4 bg-gradient-to-br from-indigo-50 to-emerald-50 rounded-xl border border-indigo-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+                <div>
+                  <strong className="text-xs font-extrabold text-indigo-950 flex items-center gap-1.5">
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Paket Lengkap (Semua Master Data)
+                  </strong>
+                  <p className="text-[10px] text-slate-500 mt-0.5">1 File Excel berisi 4 Worksheet: Siswa, Guru, Instansi, dan Akun Login.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { handleDownloadAllMasterData(); setIsDownloadModalOpen(false); }}
+                  className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" /> Unduh Paket Lengkap
+                </button>
+              </div>
+
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-1 pt-1">
+                Unduh Per Kategori Master:
+              </div>
+
+              {/* 1. Siswa */}
+              <div className="p-3.5 bg-white rounded-xl border border-slate-200/80 hover:border-indigo-200 transition-all flex items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg shrink-0">
+                    <GraduationCap className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <strong className="text-xs text-slate-800 block font-bold">1. Master Data Siswa</strong>
+                    <span className="text-[10px] text-slate-400">{users.filter(u => u.role === 'siswa').length} Siswa • NISN, Kelas, Jurusan, Telp, Instansi, Guru</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDownloadMasterSiswa}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 text-xs font-bold rounded-lg transition-all flex items-center gap-1 shrink-0 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" /> Excel
+                </button>
+              </div>
+
+              {/* 2. Guru */}
+              <div className="p-3.5 bg-white rounded-xl border border-slate-200/80 hover:border-indigo-200 transition-all flex items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg shrink-0">
+                    <UserCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <strong className="text-xs text-slate-800 block font-bold">2. Master Data Guru Pembimbing</strong>
+                    <span className="text-[10px] text-slate-400">{users.filter(u => u.role === 'guru').length} Guru • NIP/NIK, Telp, Email, Jumlah Bimbingan</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDownloadMasterGuru}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-600 text-slate-700 text-xs font-bold rounded-lg transition-all flex items-center gap-1 shrink-0 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" /> Excel
+                </button>
+              </div>
+
+              {/* 3. Instansi */}
+              <div className="p-3.5 bg-white rounded-xl border border-slate-200/80 hover:border-indigo-200 transition-all flex items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-amber-50 text-amber-600 rounded-lg shrink-0">
+                    <Building2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <strong className="text-xs text-slate-800 block font-bold">3. Master Instansi PKL</strong>
+                    <span className="text-[10px] text-slate-400">{instansiList.length} Instansi • Alamat, Kuota, Pembimbing Mitra, Telp</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDownloadMasterInstansi}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-amber-50 hover:text-amber-600 text-slate-700 text-xs font-bold rounded-lg transition-all flex items-center gap-1 shrink-0 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" /> Excel
+                </button>
+              </div>
+
+              {/* 4. Akun Login */}
+              <div className="p-3.5 bg-white rounded-xl border border-slate-200/80 hover:border-indigo-200 transition-all flex items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-slate-100 text-slate-700 rounded-lg shrink-0">
+                    <Settings className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <strong className="text-xs text-slate-800 block font-bold">4. Master Akun Login</strong>
+                    <span className="text-[10px] text-slate-400">{users.length} Akun • Username, Role, Nomor Induk, Telepon, Password</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDownloadMasterAkun}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-all flex items-center gap-1 shrink-0 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" /> Excel
+                </button>
+              </div>
+            </div>
+
+            <div className="p-4 bg-white border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsDownloadModalOpen(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
+              >
+                Tutup
+              </button>
             </div>
           </div>
         </div>
