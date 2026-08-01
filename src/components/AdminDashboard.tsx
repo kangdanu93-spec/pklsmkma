@@ -1199,6 +1199,110 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
     XLSX.writeFile(workbook, `Master_Data_Akun_Login_${new Date().getFullYear()}.xlsx`);
   };
 
+  const handleDownloadDataPengajuan = () => {
+    const dataToExport = placements.map((p, idx) => {
+      const stud = users.find(u => u.id === p.id_siswa);
+      const inst = instansiList.find(i => i.id === p.id_instansi);
+
+      const statusText = p.status === 'disetujui' ? 'DISETUJUI' : p.status === 'ditolak' ? 'DITOLAK' : 'MENUNGGU VERIFIKASI';
+      const tglMulai = p.tanggal_mulai ? new Date(p.tanggal_mulai).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
+      const tglSelesai = p.tanggal_selesai ? new Date(p.tanggal_selesai).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
+      const tglPengajuan = p.tanggal_pengajuan ? new Date(p.tanggal_pengajuan).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
+
+      return {
+        'No': idx + 1,
+        'NISN': stud?.nomor_induk || '-',
+        'Nama Siswa': stud?.nama || 'Siswa Tidak Ditemukan',
+        'Kelas': stud?.kelas || '-',
+        'Jurusan': stud?.jurusan || '-',
+        'No. Telepon Siswa': stud?.telepon || '-',
+        'Instansi Yang Diajukan': inst?.nama_instansi || 'Instansi Tidak Ditemukan',
+        'Alamat Instansi': inst?.alamat || '-',
+        'Tanggal Pengajuan': tglPengajuan,
+        'Periode Mulai PKL': tglMulai,
+        'Periode Selesai PKL': tglSelesai,
+        'Status Pengajuan': statusText,
+        'Catatan Admin': p.catatan_admin || '-'
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    worksheet['!cols'] = [
+      { wch: 6 },  // No
+      { wch: 16 }, // NISN
+      { wch: 28 }, // Nama
+      { wch: 14 }, // Kelas
+      { wch: 24 }, // Jurusan
+      { wch: 16 }, // Telepon
+      { wch: 32 }, // Instansi
+      { wch: 40 }, // Alamat
+      { wch: 20 }, // Tgl Pengajuan
+      { wch: 20 }, // Tgl Mulai
+      { wch: 20 }, // Tgl Selesai
+      { wch: 22 }, // Status
+      { wch: 30 }  // Catatan
+    ];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Pengajuan Tempat PKL');
+    XLSX.writeFile(workbook, `Data_Pengajuan_Tempat_PKL_${new Date().getFullYear()}.xlsx`);
+  };
+
+  const handleDownloadDataPlotting = () => {
+    const studentsOnly = users.filter(u => u.role === 'siswa');
+    const dataToExport = studentsOnly.map((stud, idx) => {
+      const placement = placements.find(p => p.id_siswa === stud.id && p.status === 'disetujui');
+      const company = placement ? instansiList.find(i => i.id === placement.id_instansi) : null;
+      const teacher = stud.id_pembimbing ? users.find(u => u.id === stud.id_pembimbing) : null;
+
+      let statusPlotting = 'Belum Plotting';
+      if (company && teacher) {
+        statusPlotting = 'Lengkap (Instansi & Guru)';
+      } else if (company && !teacher) {
+        statusPlotting = 'Belum Plotting Guru';
+      } else if (!company && teacher) {
+        statusPlotting = 'Belum Plotting Instansi';
+      }
+
+      return {
+        'No': idx + 1,
+        'NISN': stud.nomor_induk || '-',
+        'Nama Siswa': stud.nama,
+        'Kelas': stud.kelas || '-',
+        'Jurusan': stud.jurusan || '-',
+        'No. Telepon Siswa': stud.telepon || '-',
+        'Instansi PKL (Penempatan)': company?.nama_instansi || 'Belum Penempatan',
+        'Alamat Instansi': company?.alamat || '-',
+        'Pembimbing Instansi': company?.pembimbing_nama || '-',
+        'No. Telp Pembimbing Instansi': company?.pembimbing_telp || '-',
+        'Guru Pembimbing Sekolah': teacher?.nama || 'Belum Diplot',
+        'NIP Guru Pembimbing': teacher?.nomor_induk || '-',
+        'No. Telp Guru Pembimbing': teacher?.telepon || '-',
+        'Status Plotting': statusPlotting
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    worksheet['!cols'] = [
+      { wch: 6 },  // No
+      { wch: 16 }, // NISN
+      { wch: 28 }, // Nama Siswa
+      { wch: 14 }, // Kelas
+      { wch: 24 }, // Jurusan
+      { wch: 16 }, // Telp Siswa
+      { wch: 32 }, // Instansi
+      { wch: 40 }, // Alamat Instansi
+      { wch: 26 }, // Pembimbing Instansi
+      { wch: 20 }, // Telp Instansi
+      { wch: 28 }, // Guru Sekolah
+      { wch: 20 }, // NIP Guru
+      { wch: 20 }, // Telp Guru
+      { wch: 28 }  // Status Plotting
+    ];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Plotting Penempatan PKL');
+    XLSX.writeFile(workbook, `Data_Plotting_Penempatan_PKL_${new Date().getFullYear()}.xlsx`);
+  };
+
   const handleDownloadAllMasterData = () => {
     const workbook = XLSX.utils.book_new();
 
@@ -1261,7 +1365,55 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
     wsCompanies['!cols'] = [{ wch: 6 }, { wch: 32 }, { wch: 45 }, { wch: 12 }, { wch: 18 }, { wch: 12 }, { wch: 26 }, { wch: 20 }];
     XLSX.utils.book_append_sheet(workbook, wsCompanies, 'Instansi PKL');
 
-    // 4. Akun Login
+    // 4. Plotting Penempatan PKL
+    const plottingData = studentsOnly.map((stud, idx) => {
+      const placement = placements.find(p => p.id_siswa === stud.id && p.status === 'disetujui');
+      const company = placement ? instansiList.find(i => i.id === placement.id_instansi) : null;
+      const teacher = stud.id_pembimbing ? users.find(u => u.id === stud.id_pembimbing) : null;
+
+      let statusPlotting = 'Belum Plotting';
+      if (company && teacher) statusPlotting = 'Lengkap (Instansi & Guru)';
+      else if (company && !teacher) statusPlotting = 'Belum Plotting Guru';
+      else if (!company && teacher) statusPlotting = 'Belum Plotting Instansi';
+
+      return {
+        'No': idx + 1,
+        'NISN': stud.nomor_induk || '-',
+        'Nama Siswa': stud.nama,
+        'Kelas': stud.kelas || '-',
+        'Jurusan': stud.jurusan || '-',
+        'No. Telepon': stud.telepon || '-',
+        'Instansi Penempatan': company?.nama_instansi || 'Belum Penempatan',
+        'Guru Pembimbing Sekolah': teacher?.nama || 'Belum Diplot',
+        'Status Plotting': statusPlotting
+      };
+    });
+    const wsPlotting = XLSX.utils.json_to_sheet(plottingData);
+    wsPlotting['!cols'] = [{ wch: 6 }, { wch: 16 }, { wch: 28 }, { wch: 14 }, { wch: 24 }, { wch: 16 }, { wch: 32 }, { wch: 28 }, { wch: 26 }];
+    XLSX.utils.book_append_sheet(workbook, wsPlotting, 'Plotting Penempatan');
+
+    // 5. Pengajuan tempat PKL
+    const pengajuanData = placements.map((p, idx) => {
+      const stud = users.find(u => u.id === p.id_siswa);
+      const inst = instansiList.find(i => i.id === p.id_instansi);
+      const statusText = p.status === 'disetujui' ? 'DISETUJUI' : p.status === 'ditolak' ? 'DITOLAK' : 'MENUNGGU VERIFIKASI';
+      return {
+        'No': idx + 1,
+        'NISN': stud?.nomor_induk || '-',
+        'Nama Siswa': stud?.nama || 'Siswa Tidak Ditemukan',
+        'Kelas': stud?.kelas || '-',
+        'Jurusan': stud?.jurusan || '-',
+        'Instansi Diajukan': inst?.nama_instansi || '-',
+        'Tanggal Pengajuan': p.tanggal_pengajuan ? new Date(p.tanggal_pengajuan).toLocaleDateString('id-ID') : '-',
+        'Status': statusText,
+        'Catatan Admin': p.catatan_admin || '-'
+      };
+    });
+    const wsPengajuan = XLSX.utils.json_to_sheet(pengajuanData);
+    wsPengajuan['!cols'] = [{ wch: 6 }, { wch: 16 }, { wch: 28 }, { wch: 14 }, { wch: 24 }, { wch: 30 }, { wch: 18 }, { wch: 20 }, { wch: 28 }];
+    XLSX.utils.book_append_sheet(workbook, wsPengajuan, 'Pengajuan PKL');
+
+    // 6. Akun Login
     const accountData = users.map((u, idx) => {
       const placement = placements.find(p => p.id_siswa === u.id && p.status === 'disetujui');
       const company = placement ? instansiList.find(i => i.id === placement.id_instansi) : null;
@@ -2825,12 +2977,21 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
               
               {/* PLACEMENT APPLICATIONS SECTION */}
               <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-                <h3 className="text-base font-bold text-slate-800 mb-4 flex items-center justify-between">
-                  <span>Persetujuan Pengajuan Tempat PKL</span>
-                  <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full font-medium">
-                    {pendingPlacementsCount} perlu diproses
-                  </span>
-                </h3>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-slate-800">Persetujuan Pengajuan Tempat PKL</h3>
+                    <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full font-medium">
+                      {pendingPlacementsCount} perlu diproses
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDownloadDataPengajuan}
+                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer shrink-0"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Unduh Data Pengajuan (Excel)
+                  </button>
+                </div>
 
                 {placements.length === 0 ? (
                   <p className="text-xs text-slate-400 italic py-6 text-center">Belum ada pengajuan tempat PKL dari siswa.</p>
@@ -2899,6 +3060,13 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
 
                   {/* Filters Grid */}
                   <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleDownloadDataPlotting}
+                      className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer shrink-0"
+                    >
+                      <Download className="w-3.5 h-3.5" /> Unduh Data Plotting (Excel)
+                    </button>
                     {/* Search Input */}
                     <div className="relative">
                       <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
@@ -6045,7 +6213,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                   <strong className="text-xs font-extrabold text-indigo-950 flex items-center gap-1.5">
                     <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Paket Lengkap (Semua Master Data)
                   </strong>
-                  <p className="text-[10px] text-slate-500 mt-0.5">1 File Excel berisi 4 Worksheet: Siswa, Guru, Instansi, dan Akun Login.</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">1 File Excel berisi 6 Worksheet: Siswa, Guru, Instansi, Plotting, Pengajuan, dan Akun.</p>
                 </div>
                 <button
                   type="button"
@@ -6057,7 +6225,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
               </div>
 
               <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-1 pt-1">
-                Unduh Per Kategori Master:
+                Unduh Per Kategori Data:
               </div>
 
               {/* 1. Siswa */}
@@ -6120,14 +6288,54 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                 </button>
               </div>
 
-              {/* 4. Akun Login */}
+              {/* 4. Plotting & Penempatan */}
+              <div className="p-3.5 bg-white rounded-xl border border-slate-200/80 hover:border-indigo-200 transition-all flex items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-50 text-blue-600 rounded-lg shrink-0">
+                    <ClipboardList className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <strong className="text-xs text-slate-800 block font-bold">4. Data Plotting & Penempatan PKL</strong>
+                    <span className="text-[10px] text-slate-400">Pemetaan Siswa ke Instansi Mitra & Guru Pembimbing Sekolah</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDownloadDataPlotting}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-700 text-xs font-bold rounded-lg transition-all flex items-center gap-1 shrink-0 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" /> Excel
+                </button>
+              </div>
+
+              {/* 5. Pengajuan tempat PKL */}
+              <div className="p-3.5 bg-white rounded-xl border border-slate-200/80 hover:border-indigo-200 transition-all flex items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-purple-50 text-purple-600 rounded-lg shrink-0">
+                    <FileCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <strong className="text-xs text-slate-800 block font-bold">5. Data Pengajuan Tempat PKL</strong>
+                    <span className="text-[10px] text-slate-400">{placements.length} Pengajuan • Riwayat status disetujui, ditolak & pending</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDownloadDataPengajuan}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-purple-50 hover:text-purple-600 text-slate-700 text-xs font-bold rounded-lg transition-all flex items-center gap-1 shrink-0 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" /> Excel
+                </button>
+              </div>
+
+              {/* 6. Akun Login */}
               <div className="p-3.5 bg-white rounded-xl border border-slate-200/80 hover:border-indigo-200 transition-all flex items-center justify-between gap-3 shadow-2xs">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-slate-100 text-slate-700 rounded-lg shrink-0">
                     <Settings className="w-4 h-4" />
                   </div>
                   <div>
-                    <strong className="text-xs text-slate-800 block font-bold">4. Master Akun Login</strong>
+                    <strong className="text-xs text-slate-800 block font-bold">6. Master Akun Login</strong>
                     <span className="text-[10px] text-slate-400">{users.length} Akun • Username, Role, Nomor Induk, Telepon, Password</span>
                   </div>
                 </div>
