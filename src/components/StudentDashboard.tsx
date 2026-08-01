@@ -136,12 +136,26 @@ export default function StudentDashboard({ student, instansiList, announcements,
       setJournals((resJour.data || []).filter(j => j.id_siswa === student.id));
       setAttendanceLogs((resAtt.data || []).filter(a => a.id_siswa === student.id));
 
-      const myPlace = (resPlace.data || []).find(p => p.id_siswa === student.id);
-      setPlacement(myPlace || null);
+      const rawPlacements = resPlace.data || [];
+      const myPlace = rawPlacements.find(p => p && (p.id_siswa === student.id || p.id_siswa === student.email || p.id_siswa === student.nomor_induk));
       if (myPlace) {
+        setPlacement(myPlace);
         setApplyInstansiId(myPlace.id_instansi);
-        setApplyStart(myPlace.tanggal_mulai);
-        setApplyEnd(myPlace.tanggal_selesai);
+        setApplyStart(myPlace.tanggal_mulai || '2026-07-01');
+        setApplyEnd(myPlace.tanggal_selesai || '2026-10-01');
+      } else if (student.id_instansi) {
+        const virtualPlace: PklPlacement = {
+          id: `virtual-${student.id}`,
+          id_siswa: student.id,
+          id_instansi: student.id_instansi,
+          tanggal_mulai: '2026-07-01',
+          tanggal_selesai: '2026-10-01',
+          status: 'disetujui'
+        };
+        setPlacement(virtualPlace);
+        setApplyInstansiId(student.id_instansi);
+        setApplyStart('2026-07-01');
+        setApplyEnd('2026-10-01');
       } else if (instansiList.length > 0) {
         setApplyInstansiId(instansiList[0].id);
       }
@@ -328,6 +342,16 @@ export default function StudentDashboard({ student, instansiList, announcements,
               }`}>
                 {isApproved ? 'AKTIF PKL' :
                  placement?.status === 'pending' ? 'MENUNGGU ACC' : 'TIDAK AKTIF / BELUM MENGAJUKAN'}
+              </span>
+            </div>
+            <div>
+              <span className="text-indigo-400 text-xs block uppercase font-semibold">Tanggal Mulai & Akhir PKL:</span>
+              <span className="font-semibold text-white block">
+                {placement?.tanggal_mulai ? (
+                  `${new Date(placement.tanggal_mulai).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} - ${new Date(placement.tanggal_selesai || '2026-10-01').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                ) : (
+                  '01 Jul 2026 - 01 Okt 2026'
+                )}
               </span>
             </div>
           </div>

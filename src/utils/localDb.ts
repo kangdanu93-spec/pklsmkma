@@ -1063,6 +1063,7 @@ export async function dbGetPlacements(): Promise<{ data: PklPlacement[], fromSup
     try {
       const { data, error } = await sb.from('pkl_placements').select('*');
       if (!error && data) {
+        localDb.set('SIM_PKL_PLACEMENTS', data as PklPlacement[]);
         return { data: data as PklPlacement[], fromSupabase: true };
       }
     } catch (e) {}
