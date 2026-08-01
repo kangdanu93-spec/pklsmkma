@@ -900,7 +900,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
       const res = await dbSaveUser(updatedUser);
       if (res.success) {
         if (tempInstansiId) {
-          const existingPlace = placements.find(p => p.id_siswa === studentId);
+          const existingPlace = placements.find(p => p.id_siswa === studentId || p.id_siswa === studentUser.email || p.id_siswa === studentUser.nomor_induk);
           const newPlacement: PklPlacement = {
             id: existingPlace?.id || `place-${Date.now()}`,
             id_siswa: studentId,
@@ -1062,11 +1062,66 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
   };
 
   // ---------------- DOWNLOAD MASTER DATA HANDLERS ----------------
+  const getStudentPlacement = (s: PklUser) => {
+    if (!s) return null;
+    const place = placements.find(p => p && (p.id_siswa === s.id || p.id_siswa === s.email || p.id_siswa === s.nomor_induk));
+    if (place) return place;
+
+    if (s.id_instansi) {
+      return {
+        id: `virtual-${s.id}`,
+        id_siswa: s.id,
+        id_instansi: s.id_instansi,
+        tanggal_mulai: '2026-07-01',
+        tanggal_selesai: '2026-10-01',
+        status: 'disetujui' as const,
+        catatan: 'Penempatan terdaftar'
+      };
+    }
+    return null;
+  };
+
+  const getStudentCompany = (s: PklUser) => {
+    if (!s) return null;
+    const placement = getStudentPlacement(s);
+    const targetId = s.id_instansi || placement?.id_instansi;
+    if (!targetId) return null;
+    return instansiList.find(i => 
+      i.id === targetId || 
+      String(i.id) === String(targetId) ||
+      i.nama_instansi.toLowerCase() === String(targetId).toLowerCase()
+    ) || null;
+  };
+
+  const formatPklDateDisplay = (place?: PklPlacement | null) => {
+    if (!place) return '-';
+    const startStr = place.tanggal_mulai || '2026-07-01';
+    const endStr = place.tanggal_selesai || '2026-10-01';
+    
+    let formattedStart = startStr;
+    let formattedEnd = endStr;
+
+    try {
+      const d1 = new Date(startStr);
+      if (!isNaN(d1.getTime())) {
+        formattedStart = d1.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+      }
+    } catch {}
+
+    try {
+      const d2 = new Date(endStr);
+      if (!isNaN(d2.getTime())) {
+        formattedEnd = d2.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+      }
+    } catch {}
+
+    return `${formattedStart} - ${formattedEnd}`;
+  };
+
   const handleDownloadMasterSiswa = () => {
     const studentsOnly = users.filter(u => u.role === 'siswa');
     const dataToExport = studentsOnly.map((s, idx) => {
-      const placement = placements.find(p => p.id_siswa === s.id && p.status === 'disetujui');
-      const company = placement ? instansiList.find(i => i.id === placement.id_instansi) : null;
+      const company = getStudentCompany(s);
       const teacher = s.id_pembimbing ? users.find(u => u.id === s.id_pembimbing) : null;
 
       return {
@@ -1133,7 +1188,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
 
   const handleDownloadMasterInstansi = () => {
     const dataToExport = instansiList.map((inst, idx) => {
-      const countSiswa = users.filter(u => u.role === 'siswa' && u.id_instansi === inst.id).length;
+      const countSiswa = users.filter(u => u.role === 'siswa' && getStudentCompany(u)?.id === inst.id).length;
       return {
         'No': idx + 1,
         'Nama Instansi / Perusahaan': inst.nama_instansi,
@@ -1164,8 +1219,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
 
   const handleDownloadMasterAkun = () => {
     const dataToExport = users.map((u, idx) => {
-      const placement = placements.find(p => p.id_siswa === u.id && p.status === 'disetujui');
-      const company = placement ? instansiList.find(i => i.id === placement.id_instansi) : null;
+      const company = getStudentCompany(u);
 
       return {
         'No': idx + 1,
@@ -1202,7 +1256,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
   const handleDownloadDataPengajuan = () => {
     const dataToExport = placements.map((p, idx) => {
       const stud = users.find(u => u.id === p.id_siswa);
-      const inst = instansiList.find(i => i.id === p.id_instansi);
+      const inst = instansiList.find(i => i.id === p.id_instansi || i.nama_instansi.toLowerCase() === p.id_instansi.toLowerCase());
 
       const statusText = p.status === 'disetujui' ? 'DISETUJUI' : p.status === 'ditolak' ? 'DITOLAK' : 'MENUNGGU VERIFIKASI';
       const tglMulai = p.tanggal_mulai ? new Date(p.tanggal_mulai).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
@@ -1216,7 +1270,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
         'Kelas': stud?.kelas || '-',
         'Jurusan': stud?.jurusan || '-',
         'No. Telepon Siswa': stud?.telepon || '-',
-        'Instansi Yang Diajukan': inst?.nama_instansi || 'Instansi Tidak Ditemukan',
+        'Instansi Yang Diajukan': inst?.nama_instansi || p.id_instansi || 'Instansi Tidak Ditemukan',
         'Alamat Instansi': inst?.alamat || '-',
         'Tanggal Pengajuan': tglPengajuan,
         'Periode Mulai PKL': tglMulai,
@@ -1250,8 +1304,8 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
   const handleDownloadDataPlotting = () => {
     const studentsOnly = users.filter(u => u.role === 'siswa');
     const dataToExport = studentsOnly.map((stud, idx) => {
-      const placement = placements.find(p => p.id_siswa === stud.id && p.status === 'disetujui');
-      const company = placement ? instansiList.find(i => i.id === placement.id_instansi) : null;
+      const company = getStudentCompany(stud);
+      const studentPlacement = getStudentPlacement(stud);
       const teacher = stud.id_pembimbing ? users.find(u => u.id === stud.id_pembimbing) : null;
 
       let statusPlotting = 'Belum Plotting';
@@ -1262,6 +1316,9 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
       } else if (!company && teacher) {
         statusPlotting = 'Belum Plotting Instansi';
       }
+
+      const tglMulai = studentPlacement?.tanggal_mulai ? new Date(studentPlacement.tanggal_mulai).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
+      const tglSelesai = studentPlacement?.tanggal_selesai ? new Date(studentPlacement.tanggal_selesai).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
 
       return {
         'No': idx + 1,
@@ -1277,6 +1334,8 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
         'Guru Pembimbing Sekolah': teacher?.nama || 'Belum Diplot',
         'NIP Guru Pembimbing': teacher?.nomor_induk || '-',
         'No. Telp Guru Pembimbing': teacher?.telepon || '-',
+        'Periode Mulai PKL': tglMulai,
+        'Periode Selesai PKL': tglSelesai,
         'Status Plotting': statusPlotting
       };
     });
@@ -1296,6 +1355,8 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
       { wch: 28 }, // Guru Sekolah
       { wch: 20 }, // NIP Guru
       { wch: 20 }, // Telp Guru
+      { wch: 20 }, // Periode Mulai
+      { wch: 20 }, // Periode Selesai
       { wch: 28 }  // Status Plotting
     ];
     const workbook = XLSX.utils.book_new();
@@ -1309,8 +1370,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
     // 1. Siswa
     const studentsOnly = users.filter(u => u.role === 'siswa');
     const studentData = studentsOnly.map((s, idx) => {
-      const placement = placements.find(p => p.id_siswa === s.id && p.status === 'disetujui');
-      const company = placement ? instansiList.find(i => i.id === placement.id_instansi) : null;
+      const company = getStudentCompany(s);
       const teacher = s.id_pembimbing ? users.find(u => u.id === s.id_pembimbing) : null;
       return {
         'No': idx + 1,
@@ -1349,7 +1409,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
 
     // 3. Instansi
     const companyData = instansiList.map((inst, idx) => {
-      const countSiswa = users.filter(u => u.role === 'siswa' && u.id_instansi === inst.id).length;
+      const countSiswa = users.filter(u => u.role === 'siswa' && getStudentCompany(u)?.id === inst.id).length;
       return {
         'No': idx + 1,
         'Nama Instansi / Perusahaan': inst.nama_instansi,
@@ -1367,8 +1427,8 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
 
     // 4. Plotting Penempatan PKL
     const plottingData = studentsOnly.map((stud, idx) => {
-      const placement = placements.find(p => p.id_siswa === stud.id && p.status === 'disetujui');
-      const company = placement ? instansiList.find(i => i.id === placement.id_instansi) : null;
+      const company = getStudentCompany(stud);
+      const studentPlacement = getStudentPlacement(stud);
       const teacher = stud.id_pembimbing ? users.find(u => u.id === stud.id_pembimbing) : null;
 
       let statusPlotting = 'Belum Plotting';
@@ -1395,7 +1455,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
     // 5. Pengajuan tempat PKL
     const pengajuanData = placements.map((p, idx) => {
       const stud = users.find(u => u.id === p.id_siswa);
-      const inst = instansiList.find(i => i.id === p.id_instansi);
+      const inst = instansiList.find(i => i.id === p.id_instansi || i.nama_instansi.toLowerCase() === p.id_instansi.toLowerCase());
       const statusText = p.status === 'disetujui' ? 'DISETUJUI' : p.status === 'ditolak' ? 'DITOLAK' : 'MENUNGGU VERIFIKASI';
       return {
         'No': idx + 1,
@@ -1403,7 +1463,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
         'Nama Siswa': stud?.nama || 'Siswa Tidak Ditemukan',
         'Kelas': stud?.kelas || '-',
         'Jurusan': stud?.jurusan || '-',
-        'Instansi Diajukan': inst?.nama_instansi || '-',
+        'Instansi Diajukan': inst?.nama_instansi || p.id_instansi || '-',
         'Tanggal Pengajuan': p.tanggal_pengajuan ? new Date(p.tanggal_pengajuan).toLocaleDateString('id-ID') : '-',
         'Status': statusText,
         'Catatan Admin': p.catatan_admin || '-'
@@ -1415,8 +1475,7 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
 
     // 6. Akun Login
     const accountData = users.map((u, idx) => {
-      const placement = placements.find(p => p.id_siswa === u.id && p.status === 'disetujui');
-      const company = placement ? instansiList.find(i => i.id === placement.id_instansi) : null;
+      const company = getStudentCompany(u);
       return {
         'No': idx + 1,
         'Email Login': u.email,
@@ -3222,120 +3281,120 @@ export default function AdminDashboard({ admin, onRefreshGlobalData, refreshCoun
                             <tbody className="divide-y divide-slate-50 text-slate-600">
                               {paginatedPlottingStudents.map((stud) => {
                                 const isEditing = editingStudentId === stud.id;
-                                const studentPlacement = placements.find(p => p.id_siswa === stud.id);
-                                const company = instansiList.find(i => i.id === stud.id_instansi || i.id === studentPlacement?.id_instansi);
+                                const studentPlacement = getStudentPlacement(stud);
+                                const company = getStudentCompany(stud);
                                 const currentTeacher = teachers.find(t => t.id === stud.id_pembimbing);
                                 
-                                  return (
-                                    <tr key={stud.id} className="hover:bg-slate-50/50">
-                                      <td className="py-3 pr-4">
-                                        <span className="font-semibold text-slate-800 block">{stud.nama}</span>
-                                        <span className="text-[10px] text-slate-400">{stud.kelas || 'No Kelas'} • NISN: {stud.nomor_induk}</span>
-                                      </td>
-                                      <td className="py-3 px-4 font-medium text-slate-700">
-                                        {isEditing ? (
-                                          <select
-                                            value={tempInstansiId}
-                                            onChange={(e) => setTempInstansiId(e.target.value)}
-                                            className="px-2 py-1 rounded border border-slate-200 focus:outline-none bg-white text-slate-800 text-xs w-full max-w-[180px]"
-                                          >
-                                            <option value="">-- Pilih Instansi --</option>
-                                            {instansiList.map(inst => (
-                                              <option key={inst.id} value={inst.id}>{inst.nama_instansi}</option>
-                                            ))}
-                                          </select>
-                                        ) : (
-                                          company?.nama_instansi || <span className="text-slate-400 italic">Belum diplot</span>
-                                        )}
-                                      </td>
-                                      <td className="py-3 px-4">
-                                        {isEditing ? (
-                                          <select
-                                            value={tempPembimbingId}
-                                            onChange={(e) => setTempPembimbingId(e.target.value)}
-                                            className="px-2 py-1 rounded border border-slate-200 focus:outline-none bg-white text-slate-800 text-xs"
-                                          >
-                                            <option value="">-- Pilih Guru --</option>
-                                            {teachers.map(t => (
-                                              <option key={t.id} value={t.id}>{t.nama}</option>
-                                            ))}
-                                          </select>
-                                        ) : (
-                                          <span className={`font-medium ${currentTeacher ? 'text-indigo-600' : 'text-slate-400 italic'}`}>
-                                            {currentTeacher ? currentTeacher.nama : 'Belum diplot'}
+                                return (
+                                  <tr key={stud.id} className="hover:bg-slate-50/50">
+                                    <td className="py-3 pr-4">
+                                      <span className="font-semibold text-slate-800 block">{stud.nama}</span>
+                                      <span className="text-[10px] text-slate-400">{stud.kelas || 'No Kelas'} • NISN: {stud.nomor_induk}</span>
+                                    </td>
+                                    <td className="py-3 px-4 font-medium text-slate-700">
+                                      {isEditing ? (
+                                        <select
+                                          value={tempInstansiId}
+                                          onChange={(e) => setTempInstansiId(e.target.value)}
+                                          className="px-2 py-1 rounded border border-slate-200 focus:outline-none bg-white text-slate-800 text-xs w-full max-w-[180px]"
+                                        >
+                                          <option value="">-- Pilih Instansi --</option>
+                                          {instansiList.map(inst => (
+                                            <option key={inst.id} value={inst.id}>{inst.nama_instansi}</option>
+                                          ))}
+                                        </select>
+                                      ) : (
+                                        company?.nama_instansi || <span className="text-slate-400 italic">Belum diplot</span>
+                                      )}
+                                    </td>
+                                    <td className="py-3 px-4">
+                                      {isEditing ? (
+                                        <select
+                                          value={tempPembimbingId}
+                                          onChange={(e) => setTempPembimbingId(e.target.value)}
+                                          className="px-2 py-1 rounded border border-slate-200 focus:outline-none bg-white text-slate-800 text-xs"
+                                        >
+                                          <option value="">-- Pilih Guru --</option>
+                                          {teachers.map(t => (
+                                            <option key={t.id} value={t.id}>{t.nama}</option>
+                                          ))}
+                                        </select>
+                                      ) : (
+                                        <span className={`font-medium ${currentTeacher ? 'text-indigo-600' : 'text-slate-400 italic'}`}>
+                                          {currentTeacher ? currentTeacher.nama : 'Belum diplot'}
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="py-3 px-4">
+                                      {isEditing ? (
+                                        <div className="flex flex-col gap-1 max-w-[150px]">
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-[9px] text-slate-400 w-8 shrink-0">Mulai:</span>
+                                            <input
+                                              type="date"
+                                              value={tempTanggalMulai}
+                                              onChange={(e) => setTempTanggalMulai(e.target.value)}
+                                              className="px-1 py-0.5 rounded border border-slate-200 focus:outline-none bg-white text-slate-800 text-[10px] w-full"
+                                            />
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-[9px] text-slate-400 w-8 shrink-0">Akhir:</span>
+                                            <input
+                                              type="date"
+                                              value={tempTanggalSelesai}
+                                              onChange={(e) => setTempTanggalSelesai(e.target.value)}
+                                              className="px-1 py-0.5 rounded border border-slate-200 focus:outline-none bg-white text-slate-800 text-[10px] w-full"
+                                            />
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        studentPlacement ? (
+                                          <span className="font-semibold text-slate-700 block">
+                                            {formatPklDateDisplay(studentPlacement)}
                                           </span>
-                                        )}
-                                      </td>
-                                      <td className="py-3 px-4">
-                                        {isEditing ? (
-                                          <div className="flex flex-col gap-1 max-w-[150px]">
-                                            <div className="flex items-center gap-1">
-                                              <span className="text-[9px] text-slate-400 w-8 shrink-0">Mulai:</span>
-                                              <input
-                                                type="date"
-                                                value={tempTanggalMulai}
-                                                onChange={(e) => setTempTanggalMulai(e.target.value)}
-                                                className="px-1 py-0.5 rounded border border-slate-200 focus:outline-none bg-white text-slate-800 text-[10px] w-full"
-                                              />
-                                            </div>
-                                            <div className="flex items-center gap-1">
-                                              <span className="text-[9px] text-slate-400 w-8 shrink-0">Akhir:</span>
-                                              <input
-                                                type="date"
-                                                value={tempTanggalSelesai}
-                                                onChange={(e) => setTempTanggalSelesai(e.target.value)}
-                                                className="px-1 py-0.5 rounded border border-slate-200 focus:outline-none bg-white text-slate-800 text-[10px] w-full"
-                                              />
-                                            </div>
-                                          </div>
                                         ) : (
-                                          studentPlacement ? (
-                                            <span className="font-semibold text-slate-700">
-                                              {new Date(studentPlacement.tanggal_mulai).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} - {new Date(studentPlacement.tanggal_selesai).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
-                                            </span>
-                                          ) : (
-                                            <span className="text-slate-400 italic">Belum Diatur</span>
-                                          )
-                                        )}
-                                      </td>
-                                      <td className="py-3 pl-4 text-right">
-                                        {isEditing ? (
-                                          <div className="flex gap-1 justify-end">
-                                            <button
-                                              onClick={() => setEditingStudentId(null)}
-                                              className="px-2 py-1 rounded bg-slate-100 text-slate-600 font-semibold text-xs"
-                                            >
-                                              Batal
-                                            </button>
-                                            <button
-                                              onClick={() => handleUpdatePembimbing(stud.id)}
-                                              className="px-2 py-1 rounded bg-indigo-600 text-white font-semibold text-xs flex items-center gap-0.5"
-                                            >
-                                              <Check className="w-3 h-3" /> Simpan
-                                            </button>
-                                          </div>
+                                          <span className="text-slate-400 italic">Belum Diatur</span>
+                                        )
+                                      )}
+                                    </td>
+                                    <td className="py-3 pl-4 text-right">
+                                      {isEditing ? (
+                                        <div className="flex gap-1 justify-end">
+                                          <button
+                                            onClick={() => setEditingStudentId(null)}
+                                            className="px-2 py-1 rounded bg-slate-100 text-slate-600 font-semibold text-xs"
+                                          >
+                                            Batal
+                                          </button>
+                                          <button
+                                            onClick={() => handleUpdatePembimbing(stud.id)}
+                                            className="px-2 py-1 rounded bg-indigo-600 text-white font-semibold text-xs flex items-center gap-0.5"
+                                          >
+                                            <Check className="w-3 h-3" /> Simpan
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        !isMonitoringOnly ? (
+                                          <button
+                                            onClick={() => {
+                                              setEditingStudentId(stud.id);
+                                              setTempPembimbingId(stud.id_pembimbing || '');
+                                              setTempInstansiId(stud.id_instansi || '');
+                                              const existingPlace = getStudentPlacement(stud);
+                                              setTempTanggalMulai(existingPlace?.tanggal_mulai || '2026-07-01');
+                                              setTempTanggalSelesai(existingPlace?.tanggal_selesai || '2026-10-01');
+                                            }}
+                                            className="text-xs text-indigo-600 hover:underline font-semibold"
+                                          >
+                                            Plot Siswa
+                                          </button>
                                         ) : (
-                                          !isMonitoringOnly ? (
-                                            <button
-                                              onClick={() => {
-                                                setEditingStudentId(stud.id);
-                                                setTempPembimbingId(stud.id_pembimbing || '');
-                                                setTempInstansiId(stud.id_instansi || '');
-                                                const existingPlace = placements.find(p => p.id_siswa === stud.id);
-                                                setTempTanggalMulai(existingPlace?.tanggal_mulai || '2026-07-01');
-                                                setTempTanggalSelesai(existingPlace?.tanggal_selesai || '2026-10-01');
-                                              }}
-                                              className="text-xs text-indigo-600 hover:underline font-semibold"
-                                            >
-                                              Plot Siswa
-                                            </button>
-                                          ) : (
-                                            <span className="text-[11px] text-slate-400 italic">No Akses</span>
-                                          )
-                                        )}
-                                      </td>
-                                    </tr>
-                                  );
+                                          <span className="text-[11px] text-slate-400 italic">No Akses</span>
+                                        )
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
                               })}
                             </tbody>
                           </table>

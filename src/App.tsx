@@ -254,7 +254,7 @@ export default function App() {
       const rawPlacements = resPlace.data || [];
       const syncedUsers = rawUsers.map(u => {
         if (u.role === 'siswa' && !u.id_instansi) {
-          const place = rawPlacements.find(p => p.id_siswa === u.id);
+          const place = rawPlacements.find(p => p.id_siswa === u.id || p.id_siswa === u.email || p.id_siswa === u.nomor_induk);
           if (place?.id_instansi) {
             return { ...u, id_instansi: place.id_instansi };
           }
