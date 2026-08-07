@@ -1936,6 +1936,7 @@ export async function dbGetTeacherMonitorings(): Promise<{ data: TeacherMonitori
       }
     }
 
+    localDb.set('SIM_PKL_TEACHER_MONITORING', uniqueData);
     return { data: uniqueData, fromSupabase: true };
   }
 
